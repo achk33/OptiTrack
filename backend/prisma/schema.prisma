@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Asset {
+  Matricule     String      @id
+  NomPrenom     String?
+  Entite        String?
+  Categorie     Categorie
+  Marque        String?
+  Modele        String?
+  Code          String?
+  SerialNumber  String?     @unique
+  Etat          Etat        @default(En_service)
+  Validation    Validation  @default(A_verifier)
+  Remarque      String?
+  DateDePassage DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
+  workOrders    WorkOrder[]
+
+  @@index([Entite, Categorie, Etat, Validation])
+  @@index([Matricule])
+  @@index([createdAt])
+  @@index([Etat])
+  @@index([Validation])
+}
+
+model PMPlan {
+  id          String      @id @default(cuid())
+  name        String
+  scopeType   String
+  scopeValue  String
+  periodicite String      @default("MIS")
+  taches      Json
+  ownerRole   Role
+  nextRunAt   DateTime?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  lastRunAt   DateTime?
+  workOrders  WorkOrder[]
+
+  @@index([active])
+  @@index([nextRunAt])
+  @@index([scopeType, scopeValue])
+}
+
+model WorkOrder {
+  id             String   @id @default(cuid())
+  assetMatricule String
+  pmPlanId       String?
+  taches         Json
+  priorite       String
+  assigne        String?
+  echeance       DateTime
+  statut         String
+  commentaires   Json     @default("[]")
+  tempsPasse     Int      @default(0)
+  attachments    Json     @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  assignedUserId String?
+  asset          Asset    @relation(fields: [assetMatricule], references: [Matricule])
+  User           User?    @relation(fields: [assignedUserId], references: [id])
+  pmPlan         PMPlan?  @relation(fields: [pmPlanId], references: [id])
+
+  @@index([statut])
+  @@index([priorite])
+  @@index([echeance])
+  @@index([assetMatricule])
+  @@index([assignedUserId])
+  @@index([createdAt])
+}
+
+model User {
+  id          String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  email       String        @unique
+  password    String
+  role        Role          @default(TECHNICIEN)
+  createdAt   DateTime      @default(now())
+  firstName   String
+  lastName    String
+  isActive    Boolean       @default(true)
+  updatedAt   DateTime      @default(now()) @updatedAt
+  createdBy   String?
+  
+  // Security fields
+  failedLoginAttempts Int       @default(0)
+  lockoutUntil        DateTime?
+  lastLogin           DateTime?
+  
+  ActivityLog ActivityLog[]
+  User        User?         @relation("UserToUser", fields: [createdBy], references: [id])
+  other_User     User[]          @relation("UserToUser")
+  WorkOrder      WorkOrder[]
+  PasswordReset  PasswordReset[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  entity    String      // 'Asset', 'WorkOrder', etc.
+  entityId  String      // Matricule for assets
+  action    String      // 'CREATE', 'UPDATE', 'DELETE'
+  changedBy String      // User ID who made the change
+  userName  String?     // User name for display
+  userRole  String?     // User role at time of change
+  changedAt DateTime @default(now())
+  oldValues Json?       // Previous values before change
+  newValues Json?       // New values after change
+  changes   Json?       // Detailed field-by-field changes (nullable for backward compatibility)
+  diff      Json?       // Keep for backward compatibility
+  ipAddress String?     // IP address of user
+  userAgent String?     // Browser/client info
+  
+  @@index([entity, entityId])
+  @@index([changedBy])
+  @@index([changedAt])
+  @@index([entity, changedAt])
+}
+
+model TokenBlacklist {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model ActivityLog {
+  id        String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  userId    String
+  action    String
+  module    String
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  status    String   @default("SUCCESS")
+  createdAt DateTime @default(now())
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([action])
+  @@index([createdAt])
+  @@index([module])
+  @@index([userId, createdAt])
+}
+
+model Permission {
+  id             String           @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name           String           @unique
+  description    String
+  module         String
+  action         String
+  createdAt      DateTime         @default(now())
+  RolePermission RolePermission[]
+
+  @@unique([module, action])
+  @@index([module])
+}
+
+model RolePermission {
+  id           String     @id @default(dbgenerated("(gen_random_uuid())::text"))
+  role         Role
+  permissionId String
+  createdAt    DateTime   @default(now())
+  Permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@index([role])
+}
+
+model UserSession {
+  id           String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  userId       String
+  token        String   @unique
+  refreshToken String?  @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  lastActivity DateTime @default(now())
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([isActive])
+  @@index([token])
+  @@index([userId])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  ipAddress String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum Categorie {
+  Micro_ordinateur
+  Laptop
+  Serveur
+  Imprimante
+  Autre
+}
+
+enum Etat {
+  En_service
+  Hors_service
+  En_maintenance
+  Mis_au_rebut
+}
+
+enum Validation {
+  OK
+  A_verifier
+  Non_conforme
+}
+
+enum Role {
+  ADMIN
+  TECHNICIEN
+  VIEWER
+}

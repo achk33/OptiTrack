@@ -1,0 +1,9 @@
+{
+  "name": "optitrack",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "packages/shared"
+  ]
+}
