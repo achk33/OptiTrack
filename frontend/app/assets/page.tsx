@@ -23,6 +23,58 @@ function AssetsPageContent() {
   const [total, setTotal] = useState(0)
   const [pageSize, setPageSize] = useState(50)
 
+  const handleExportExcel = async () => {
+    try {
+      const params: any = {};
+      if (entite.trim()) params.Entite = entite.trim();
+      if (categorie.trim()) params.Categorie = categorie.trim();
+      if (etat.trim()) params.Etat = etat.trim();
+      if (validation.trim()) params.Validation = validation.trim();
+
+      const queryString = new URLSearchParams(params).toString();
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/assets/export/excel?${queryString}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      // Get the blob from the response
+      const blob = await response.blob();
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filename = contentDisposition
+        ? contentDisposition.split('filename=')[1]?.replace(/"/g, '')
+        : `actifs_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+      alert('Erreur lors de l\'exportation. Veuillez réessayer.');
+    }
+  };
+
   const fetchData = useCallback(async () => {
     if (!hydrated || !isAuthenticated) return
     setLoading(true)
@@ -61,6 +113,18 @@ function AssetsPageContent() {
     if (!hydrated || !isAuthenticated) return
     fetchData()
   }, [page, pageSize, hydrated, isAuthenticated, fetchData])
+
+  // Refetch data when the page comes into focus (e.g., after importing)
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return
+    
+    const handleFocus = () => {
+      fetchData()
+    }
+    
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [hydrated, isAuthenticated, fetchData])
 
   function handleSearch() {
     setPage(1) // Reset to first page when searching
@@ -114,17 +178,7 @@ function AssetsPageContent() {
             </Link>
           )}
           <button
-            onClick={() => {
-              const params = new URLSearchParams();
-              if (entite) params.append('Entite', entite);
-              if (categorie) params.append('Categorie', categorie);
-              if (etat) params.append('Etat', etat);
-              if (validation) params.append('Validation', validation);
-              const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-              const token = localStorage.getItem('token');
-              // Open backend export endpoint with auth token
-              window.open(`${backendUrl}/assets/export/excel?${params.toString()}&token=${token}`, '_blank');
-            }}
+            onClick={handleExportExcel}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg"
           >
             Exporter Excel
@@ -147,11 +201,11 @@ function AssetsPageContent() {
             placeholder="Code (ex: UC110398)" 
             className="w-48 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <select value={validation} onChange={e=>setValidation(e.target.value)} className="w-48 border border-gray-300 rounded-lg px-2 py-2 text-sm" aria-label="Filtre Validation">
-            <option value="">Validation: Toutes</option>
-            <option value="OK">Conforme</option>
-            <option value="A_verifier">À vérifier</option>
-            <option value="Non_conforme">Non conforme</option>
+          <select value={validation} onChange={(e) => setValidation(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <option value="">Toutes les validations</option>
+            <option value="OK">Confirme</option>
+            <option value="A_verifier">A vérifier</option>
+            <option value="Non_conforme">Non confirme</option>
           </select>
           <button 
             onClick={handleSearch} 
@@ -220,8 +274,8 @@ function AssetsPageContent() {
                   <td className="px-4 py-3 text-sm">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getValidationBadge(item.Validation)}`}>
                       {item.Validation === 'A_verifier' ? 'À vérifier' : 
-                       item.Validation === 'Non_conforme' ? 'Non conforme' : 
-                       'Conforme'}
+                       item.Validation === 'Non_conforme' ? 'Non confirme' : 
+                       'Confirme'}
                     </span>
                   </td>
                   {canEditAssets && (

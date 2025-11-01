@@ -56,7 +56,7 @@ export function StatusBadge({ status, size, className }: StatusBadgeProps) {
     OK: {
       variant: "success" as const,
       icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-      label: "Conforme"
+      label: "Confirme"
     },
     A_verifier: {
       variant: "warning" as const,
@@ -66,7 +66,7 @@ export function StatusBadge({ status, size, className }: StatusBadgeProps) {
     Non_conforme: {
       variant: "danger" as const,
       icon: <XCircle className="h-3.5 w-3.5" />,
-      label: "Non conforme"
+      label: "Non confirme"
     },
     En_attente: {
       variant: "default" as const,

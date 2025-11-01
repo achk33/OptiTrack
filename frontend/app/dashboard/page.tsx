@@ -225,18 +225,18 @@ export default function DashboardPage() {
       if (kpis) {
         csvContent += "=== INDICATEURS CLÉS ===\n"
         csvContent += `Actifs totaux,${kpis.actifsTotal}\n`
-        csvContent += `Actifs conformes (OK),${kpis.actifsOK}\n`
+        csvContent += `Actifs confirmes (OK),${kpis.actifsOK}\n`
         csvContent += `Actifs à vérifier,${kpis.actifsAVerifier}\n`
-        csvContent += `Actifs non conformes,${kpis.actifsNonConformes}\n\n`
+        csvContent += `Actifs non confirmes,${kpis.actifsNonConformes}\n\n`
       }
 
       if (healthData) {
         csvContent += "=== SCORE DE SANTÉ ===\n"
         csvContent += `Score global,${healthData.healthScore}%\n`
         csvContent += `Total actifs,${healthData.total}\n`
-        csvContent += `Conformes,${healthData.breakdown.ok}\n`
+        csvContent += `Confirmes,${healthData.breakdown.ok}\n`
         csvContent += `À vérifier,${healthData.breakdown.aVerifier}\n`
-        csvContent += `Non conformes,${healthData.breakdown.nonConforme}\n\n`
+        csvContent += `Non confirmes,${healthData.breakdown.nonConforme}\n\n`
       }
 
       if (categorieData.length > 0) {
@@ -307,7 +307,7 @@ export default function DashboardPage() {
         csvContent += `Statut,Nombre,Pourcentage\n`
         csvContent += `Conformes,${healthData.breakdown.ok},${Math.round((healthData.breakdown.ok / healthData.total) * 100)}%\n`
         csvContent += `À vérifier,${healthData.breakdown.aVerifier},${Math.round((healthData.breakdown.aVerifier / healthData.total) * 100)}%\n`
-        csvContent += `Non conformes,${healthData.breakdown.nonConforme},${Math.round((healthData.breakdown.nonConforme / healthData.total) * 100)}%\n\n`
+        csvContent += `Non confirmes,${healthData.breakdown.nonConforme},${Math.round((healthData.breakdown.nonConforme / healthData.total) * 100)}%\n\n`
       }
 
       // Add detailed asset list
@@ -338,7 +338,7 @@ export default function DashboardPage() {
         }, {})
 
         csvContent += "=== ANALYSE PAR CATÉGORIE ===\n"
-        csvContent += "Catégorie,Total,Conformes,À vérifier,Non conformes,Taux conformité\n"
+        csvContent += "Catégorie,Total,Confirmes,À vérifier,Non confirmes,Taux confirmité\n"
         
         Object.entries(categoryStats).forEach(([category, stats]: [string, any]) => {
           const complianceRate = Math.round((stats.OK / stats.total) * 100)
@@ -354,13 +354,13 @@ export default function DashboardPage() {
           } else if (healthData.healthScore >= 75) {
             csvContent += "- Bon score de santé. Concentrer les efforts sur les actifs à vérifier.\n"
           } else if (healthData.healthScore >= 60) {
-            csvContent += "- Score de santé moyen. Plan d'action requis pour les actifs non conformes.\n"
+            csvContent += "- Score de santé moyen. Plan d'action requis pour les actifs non confirmes.\n"
           } else {
             csvContent += "- Score de santé critique. Intervention urgente requise.\n"
           }
           
           if (healthData.breakdown.nonConforme > 0) {
-            csvContent += `- ${healthData.breakdown.nonConforme} actifs non conformes nécessitent une action immédiate.\n`
+            csvContent += `- ${healthData.breakdown.nonConforme} actifs non confirmes nécessitent une action immédiate.\n`
           }
           
           if (healthData.breakdown.aVerifier > 0) {
@@ -532,7 +532,7 @@ export default function DashboardPage() {
             />
 
             <StatsCard
-              title="Actifs conformes"
+              title="Actifs confirmes"
               value={kpis.actifsOK}
               description={`${kpis.actifsTotal > 0 ? Math.round((kpis.actifsOK / kpis.actifsTotal) * 100) : 0}% du parc`}
               icon={<CheckCircle className="h-6 w-6" />}
@@ -552,7 +552,7 @@ export default function DashboardPage() {
             />
 
             <StatsCard
-              title="Non conformes"
+              title="Non confirmes"
               value={kpis.actifsNonConformes}
               description={`${kpis.actifsTotal > 0 ? Math.round((kpis.actifsNonConformes / kpis.actifsTotal) * 100) : 0}% à corriger`}
               icon={<XCircle className="h-6 w-6" />}
@@ -603,12 +603,12 @@ export default function DashboardPage() {
 
               {/* Breakdown Stats */}
               <div className="space-y-6">
-                {/* Conformes */}
+                {/* Confirmes */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-success-600" />
-                      <span className="font-medium text-slate-700">Actifs conformes</span>
+                      <span className="font-medium text-slate-700">Actifs confirmes</span>
                     </div>
                     <span className="font-semibold text-success-700">{healthData.breakdown.ok}</span>
                   </div>
@@ -637,12 +637,12 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                {/* Non conformes */}
+                {/* Non confirmes */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <XCircle className="h-4 w-4 text-danger-600" />
-                      <span className="font-medium text-slate-700">Non conformes</span>
+                      <span className="font-medium text-slate-700">Non confirmes</span>
                     </div>
                     <span className="font-semibold text-danger-700">{healthData.breakdown.nonConforme}</span>
                   </div>

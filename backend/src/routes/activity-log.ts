@@ -45,8 +45,6 @@ router.get('/', requireAuth, requireRole('Admin'), async (req: Request, res: Res
         ipAddress: log.ipAddress,
         createdAt: log.createdAt,
         module: log.module,
-        entity: log.entity,
-        entityId: log.entityId,
         user: {
           firstName: log.User.firstName,
           lastName: log.User.lastName,

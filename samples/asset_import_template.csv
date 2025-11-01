@@ -1,3 +1,3 @@
-Matricule,Nom Prenom,Entite,Categorie,Marque,Model,Code,NS(Serial Number),Validation,Observation,Date de passage
-SBS-0001,Jean Dupont,Siège,Laptop,Dell,Latitude 7420,UC110398,SN123456,Conforme,Remarque exemple,18/09/2025
+Matricule,Nom/Prénom,Entité,Catégorie,Marque,Modèle,Code,Numéro de Série,Validation,Remarque,Date De Passage
+SBS-0001,Jean Dupont,Siège,Laptop,Dell,Latitude 7420,UC110398,SN123456,Confirme,Remarque exemple,18/09/2025
 SBS-0002,Marie Curie,Siège,PC,HP,ProDesk,IL160194,SN654321,En attente,,

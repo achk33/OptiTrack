@@ -6,6 +6,7 @@ import { exportToExcel } from '../utils/export';
 import XLSX from 'xlsx';
 import { parseBufferToRows, normalizeRow } from '../utils/import';
 import { AssetCreateSchema, AssetUpdateSchema } from '../validation/schemas';
+import { cache } from '../utils/cache';
 
 export const assetsRouter = Router();
 
@@ -50,6 +51,10 @@ assetsRouter.post('/', requireAuth, requireRole('Admin'), async (req: Request, r
   try {
     const created = await prisma.asset.create({ data });
     await logAudit('Asset', created.Matricule, 'create', req.user!.id, { after: created });
+    
+    // Invalidate dashboard cache after asset creation
+    cache.invalidatePattern('/dashboard');
+    
     res.status(201).json(created);
   } catch (e: any) {
     res.status(400).json({ error: e.message });
@@ -76,6 +81,9 @@ assetsRouter.patch('/:id', requireAuth, requireRole('Admin', 'Technicien'), asyn
     userAgent: req.headers['user-agent'],
   });
   
+  // Invalidate dashboard cache after asset update
+  cache.invalidatePattern('/dashboard');
+  
   res.json(updated);
 });
 
@@ -85,6 +93,10 @@ assetsRouter.delete('/:id', requireAuth, requireRole('Admin'), async (req: Reque
   if (!before) return res.status(404).json({ error: 'Introuvable' });
   const updated = await prisma.asset.update({ where: { Matricule: id }, data: { deletedAt: new Date() } });
   await logAudit('Asset', id, 'soft-delete', req.user!.id, { before, after: updated });
+  
+  // Invalidate dashboard cache after asset deletion
+  cache.invalidatePattern('/dashboard');
+  
   res.json({ ok: true });
 });
 
@@ -92,6 +104,10 @@ assetsRouter.post('/:id/restore', requireAuth, requireRole('Admin'), async (req:
   const id = req.params.id;
   const updated = await prisma.asset.update({ where: { Matricule: id }, data: { deletedAt: null } });
   await logAudit('Asset', id, 'restore', req.user!.id, { after: updated });
+  
+  // Invalidate dashboard cache after asset restore
+  cache.invalidatePattern('/dashboard');
+  
   res.json(updated);
 });
 
@@ -173,7 +189,10 @@ assetsRouter.post('/import/commit', requireAuth, requireRole('Admin'), async (re
       continue; 
     }
     try {
+      // Check for existing asset by Matricule
       const existing = await prisma.asset.findUnique({ where: { Matricule: r.Matricule } });
+      
+      // Prepare data
       const data = { 
         ...r, 
         DateDePassage: (r as any)?.DateDePassage, 
@@ -181,6 +200,44 @@ assetsRouter.post('/import/commit', requireAuth, requireRole('Admin'), async (re
         Etat: mapEtat(r.Etat) as any, 
         Validation: mapValidation(r.Validation) as any 
       };
+      
+      // Ensure system fields are not included
+      delete (data as any).createdAt;
+      delete (data as any).updatedAt;
+      delete (data as any).deletedAt;
+      
+      // Handle empty or null SerialNumber - remove from data to avoid unique constraint issues
+      if (!data.SerialNumber || data.SerialNumber.trim() === '') {
+        data.SerialNumber = undefined as any;
+      }
+      
+      // Check for duplicate SerialNumber if it's not empty
+      if (data.SerialNumber) {
+        const existingSerial = await prisma.asset.findUnique({ 
+          where: { SerialNumber: data.SerialNumber } 
+        });
+        
+        // If serial exists and it's not the same asset we're updating
+        if (existingSerial && existingSerial.Matricule !== r.Matricule) {
+          if (onDuplicate === 'skip') {
+            results.push({ 
+              row: rowNum, 
+              status: 'skipped', 
+              message: `SerialNumber ${data.SerialNumber} déjà utilisé par ${existingSerial.Matricule}` 
+            });
+            continue;
+          }
+          // If update mode, we'll update the existing asset that has this serial number
+          const updated = await prisma.asset.update({ 
+            where: { Matricule: existingSerial.Matricule }, 
+            data 
+          });
+          await logAudit('Asset', existingSerial.Matricule, 'import-update-serial', req.user!.id, { before: existingSerial, after: updated });
+          results.push({ row: rowNum, status: 'ok', message: `Mis à jour ${existingSerial.Matricule} (trouvé par SerialNumber)` });
+          continue;
+        }
+      }
+      
       if (existing) {
         if (onDuplicate === 'skip') { 
           results.push({ row: rowNum, status: 'skipped', message: 'Doublon ignoré' }); 
@@ -188,17 +245,23 @@ assetsRouter.post('/import/commit', requireAuth, requireRole('Admin'), async (re
         }
         const updated = await prisma.asset.update({ where: { Matricule: r.Matricule }, data });
         await logAudit('Asset', r.Matricule, 'import-update', req.user!.id, { before: existing, after: updated });
+        results.push({ row: rowNum, status: 'ok', message: `Mis à jour ${r.Matricule}` });
       } else {
         const created = await prisma.asset.create({ data });
         await logAudit('Asset', r.Matricule, 'import-create', req.user!.id, { after: created });
+        console.log('✅ Created new asset:', created.Matricule, 'deletedAt:', created.deletedAt);
+        results.push({ row: rowNum, status: 'ok', message: `Créé ${r.Matricule}` });
       }
-      results.push({ row: rowNum, status: 'ok' });
     } catch (e: any) {
       console.error('Error processing row', r.Matricule, ':', e.message);
       results.push({ row: rowNum, status: 'error', message: e.message });
     }
   }
   console.log('Import completed, results:', results.length);
+  
+  // Invalidate dashboard cache after bulk import
+  cache.invalidatePattern('/dashboard');
+  
   res.json({ results });
 });
 
@@ -263,7 +326,7 @@ function mapEtat(e?: string) { return (e?.replace(' ', '_') as any) || 'En_servi
 
 function mapValidation(v?: string): string {
   const s = (v || '').toLowerCase();
-  if (s === 'ok' || s.includes('conforme')) return 'OK';
+  if (s === 'ok' || s.includes('confirme')) return 'OK';
   if (s === 'no' || s.includes('non')) return 'Non_conforme';
   if (s.includes('vérifier') || s.includes('verifier')) return 'A_verifier';
   return 'A_verifier';
@@ -275,20 +338,20 @@ function humanCategorie(c: string): string {
 
 function humanValidation(v: string): string {
   if (v === 'A_verifier') return 'A vérifier';
-  if (v === 'Non_conforme') return 'Non conforme';
+  if (v === 'Non_conforme') return 'Non confirme';
   return v;
 }
 
 function suggestMapping(headers: string[]): Record<string, string> {
   const canonical = {
     Matricule: ['matricule', 'id', 'asset id', 'asset'],
-    'NomPrenom': ['nom-prenom', 'nom prenom', 'user', 'utilisateur', 'employe', 'employé', 'name'],
+    'NomPrenom': ['nom-prenom', 'nom prenom', 'nom/prenom', 'nom/prénom', 'nom prénom', 'user', 'utilisateur', 'employe', 'employé', 'name'],
     Entite: ['entite', 'entité', 'service', 'departement', 'département', 'department'],
     Categorie: ['categorie', 'catégorie', 'category', 'type'],
     Marque: ['marque', 'brand'],
     Modele: ['modele', 'modèle', 'model'],
     Code: ['code', 'code inventaire', 'inventory code'],
-    'Serial Number': ['serial number', 'serial', 'sn', 'n° serie', 'n° série', 'ns', 'ns(serial number)'],
+    'Serial Number': ['serial number', 'serial', 'sn', 'n° serie', 'n° série', 'numéro de série', 'numero de serie', 'ns', 'ns(serial number)'],
     Etat: ['etat', 'état', 'status', 'state'],
     Validation: ['validation', 'val'],
     Remarque: ['remarque', 'observation', 'commentaire', 'comment'],

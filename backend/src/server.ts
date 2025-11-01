@@ -75,7 +75,7 @@ export function createServer() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range', 'Content-Disposition'],
     maxAge: 600, // 10 minutes
   }));
   

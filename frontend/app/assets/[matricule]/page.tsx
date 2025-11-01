@@ -544,16 +544,16 @@ export default function AssetDetailPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2"
                   >
                     <option value="">Sélectionner...</option>
-                    <option value="OK">Conforme</option>
+                    <option value="OK">Confirme</option>
                     <option value="A_verifier">À vérifier</option>
-                    <option value="Non_conforme">Non conforme</option>
+                    <option value="Non_conforme">Non confirme</option>
                   </select>
                 ) : (
                   <div className="mt-2">
                     <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border ${getValidationBadge(asset.Validation)}`}>
                       {asset.Validation === 'A_verifier' ? 'À vérifier' : 
-                       asset.Validation === 'Non_conforme' ? 'Non conforme' : 
-                       'Conforme'}
+                       asset.Validation === 'Non_conforme' ? 'Non confirme' : 
+                       'Confirme'}
                     </span>
                   </div>
                 )}
@@ -623,8 +623,8 @@ export default function AssetDetailPage() {
                 <div className="mt-1">
                   <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border ${getValidationBadge(asset.Validation)}`}>
                     {asset.Validation === 'A_verifier' ? 'À vérifier' : 
-                     asset.Validation === 'Non_conforme' ? 'Non conforme' : 
-                     'Conforme'}
+                     asset.Validation === 'Non_conforme' ? 'Non confirme' : 
+                     'Confirme'}
                   </span>
                 </div>
               </div>

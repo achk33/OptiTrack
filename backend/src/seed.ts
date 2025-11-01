@@ -153,7 +153,7 @@ function mapEtat(e?: string): any { return (e?.replace(' ', '_') as any) || 'En_
 
 function mapValidation(v?: string): any {
   const s = (v || '').toLowerCase();
-  if (s === 'ok' || s.includes('conforme')) return 'OK';
+  if (s === 'ok' || s.includes('confirme')) return 'OK';
   if (s === 'no' || s.includes('non')) return 'Non_conforme';
   if (s.includes('vérifier') || s.includes('verifier')) return 'A_verifier';
   return 'A_verifier';

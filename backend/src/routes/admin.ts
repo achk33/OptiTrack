@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db/client';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { cache } from '../utils/cache';
 
 const router = Router();
 
@@ -84,6 +85,42 @@ router.get('/audit-logs/stats', requireAuth, requireRole('Admin'), async (req: R
   } catch (error) {
     console.error('Error fetching audit log stats:', error);
     res.status(500).json({ message: 'Erreur lors de la récupération des statistiques' });
+  }
+});
+
+// Cache management endpoints (Admin only)
+router.get('/cache/stats', requireAuth, requireRole('Admin'), async (req: Request, res: Response) => {
+  try {
+    const stats = cache.getStats();
+    res.json({
+      ...stats,
+      message: 'Cache statistics retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Error fetching cache stats:', error);
+    res.status(500).json({ message: 'Failed to fetch cache statistics' });
+  }
+});
+
+router.post('/cache/clear', requireAuth, requireRole('Admin'), async (req: Request, res: Response) => {
+  try {
+    const { pattern } = req.body;
+    
+    if (pattern) {
+      // Clear cache entries matching pattern
+      cache.invalidatePattern(pattern);
+      res.json({ 
+        message: `Cache cleared for pattern: ${pattern}`,
+        pattern 
+      });
+    } else {
+      // Clear all cache
+      cache.clear();
+      res.json({ message: 'All cache cleared successfully' });
+    }
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+    res.status(500).json({ message: 'Failed to clear cache' });
   }
 });
 

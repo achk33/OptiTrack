@@ -1,6 +1,7 @@
 "use client"
 import { useMemo, useState } from 'react'
 import { FileInput } from 'lucide-react'
+import Link from 'next/link'
 import { api } from '../../../components/api'
 import { useAuth } from '../../../components/auth-context'
 
@@ -155,7 +156,13 @@ export default function ImportAssetsPage() {
       setImportResults(results)
       const successCount = results.filter((r) => r.status === 'ok').length
       const errorCount = results.filter((r) => r.status === 'error').length
-      setMsg(`Import terminé: ${successCount} succès, ${errorCount} erreurs`)
+      const skippedCount = results.filter((r) => r.status === 'skipped').length
+      
+      if (successCount > 0) {
+        setMsg(`✅ Import réussi: ${successCount} actif(s) importé(s), ${skippedCount} ignoré(s), ${errorCount} erreur(s). Veuillez rafraîchir la page des actifs pour voir les changements.`)
+      } else {
+        setMsg(`⚠️ Import terminé: ${successCount} succès, ${skippedCount} ignorés, ${errorCount} erreurs`)
+      }
     } catch (error: any) {
       setMsg(`Erreur d'import: ${error.response?.data?.message || error.message}`)
     } finally {
@@ -391,7 +398,19 @@ export default function ImportAssetsPage() {
 
       {/* Messages */}
       {msg && (
-        <div className={`p-4 rounded-lg mb-6 ${msg.includes('Erreur') ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-green-50 text-green-800 border border-green-200'}`}>{msg}</div>
+        <div className={`p-4 rounded-lg mb-6 ${msg.includes('Erreur') || msg.includes('⚠️') ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-green-50 text-green-800 border border-green-200'}`}>
+          <div>{msg}</div>
+          {msg.includes('✅') && importResults && importResults.filter((r) => r.status === 'ok').length > 0 && (
+            <div className="mt-3">
+              <Link
+                href="/assets"
+                className="inline-block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+              >
+                Voir les actifs importés →
+              </Link>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Preview Results */}

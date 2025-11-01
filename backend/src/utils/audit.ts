@@ -25,9 +25,9 @@ const ETAT_LABELS: Record<string, string> = {
 };
 
 const VALIDATION_LABELS: Record<string, string> = {
-  'OK': 'Conforme',
-  'A_verifier': 'À vérifier',
-  'Non_conforme': 'Non conforme',
+  'OK': 'Confirme',
+  'A_verifier': 'A vérifier',
+  'Non_conforme': 'Non confirme',
 };
 
 const CATEGORIE_LABELS: Record<string, string> = {

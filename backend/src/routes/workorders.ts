@@ -5,6 +5,7 @@ import { exportToExcel } from '../utils/export';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { cache } from '../utils/cache';
 
 export const workOrdersRouter = Router();
 const upload = multer({ dest: path.join(process.cwd(), 'uploads') });
@@ -26,11 +27,19 @@ workOrdersRouter.get('/', requireAuth, async (req: Request, res: Response) => {
 
 workOrdersRouter.post('/', requireAuth, requireRole('Admin', 'Technicien'), async (req: Request, res: Response) => {
   const wo = await prisma.workOrder.create({ data: req.body });
+  
+  // Invalidate dashboard cache after work order creation
+  cache.invalidatePattern('/dashboard');
+  
   res.status(201).json(wo);
 });
 
 workOrdersRouter.patch('/:id', requireAuth, requireRole('Admin', 'Technicien'), async (req: Request, res: Response) => {
   const wo = await prisma.workOrder.update({ where: { id: req.params.id }, data: req.body });
+  
+  // Invalidate dashboard cache after work order update
+  cache.invalidatePattern('/dashboard');
+  
   res.json(wo);
 });
 
@@ -40,6 +49,10 @@ workOrdersRouter.post('/:id/complete', requireAuth, requireRole('Admin', 'Techni
   if (resultEtat || resultValidation) {
     await prisma.asset.update({ where: { Matricule: updated.assetMatricule }, data: { Etat: resultEtat, Validation: resultValidation } as any });
   }
+  
+  // Invalidate dashboard cache after work order completion
+  cache.invalidatePattern('/dashboard');
+  
   res.json(updated);
 });
 

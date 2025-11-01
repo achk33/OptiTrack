@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db/client';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { cacheMiddleware, CacheTTL, cache } from '../utils/cache';
 
 export const dashboardRouter = Router();
 
@@ -15,8 +16,8 @@ function getPeriodInMonths(periodicite: string): number {
   }
 }
 
-// Dashboard stats endpoint
-dashboardRouter.get('/stats', requireAuth, async (req: Request, res: Response) => {
+// Dashboard stats endpoint - cached for 5 minutes
+dashboardRouter.get('/stats', requireAuth, cacheMiddleware(CacheTTL.MEDIUM), async (req: Request, res: Response) => {
   try {
     const totalAssets = await prisma.asset.count({ where: { deletedAt: null } })
     
@@ -54,63 +55,106 @@ dashboardRouter.get('/stats', requireAuth, async (req: Request, res: Response) =
   }
 })
 
-dashboardRouter.get('/kpis', requireAuth, async (_req: Request, res: Response) => {
+dashboardRouter.get('/kpis', requireAuth, cacheMiddleware(CacheTTL.MEDIUM), async (_req: Request, res: Response) => {
   const now = new Date();
   const start30 = new Date(now);
   start30.setDate(start30.getDate() - 30);
   const start60 = new Date(now);
   start60.setDate(start60.getDate() - 60);
 
-  const [
-    woOuverts, 
-    woEnRetard, 
-    actifsTotal, 
-    actifsOK, 
-    actifsAVerifier, 
-    actifsNonConformes, 
-    woCreated30, 
-    woCreatedPrev30,
-    // Asset counts by category
-    laptopCount,
-    imprimanteCount,
-    serveurCount,
-    microCount
-  ] = await Promise.all([
-    prisma.workOrder.count({ where: { statut: { in: ['Ouvert', 'En cours', 'En attente'] } } }),
-    prisma.workOrder.count({ where: { statut: { in: ['Ouvert', 'En cours'] }, echeance: { lt: new Date() } } }),
-    prisma.asset.count({ where: { deletedAt: null } }),
-    prisma.asset.count({ where: { deletedAt: null, Validation: 'OK' } }),
-    prisma.asset.count({ where: { deletedAt: null, Validation: 'A_verifier' } }),
-    prisma.asset.count({ where: { deletedAt: null, Validation: 'Non_conforme' } }),
-    prisma.workOrder.count({ where: { createdAt: { gte: start30 } } }),
-    prisma.workOrder.count({ where: { createdAt: { gte: start60, lt: start30 } } }),
-    // Category counts
-    prisma.asset.count({ where: { deletedAt: null, Categorie: 'Laptop' } }),
-    prisma.asset.count({ where: { deletedAt: null, Categorie: 'Imprimante' } }),
-    prisma.asset.count({ where: { deletedAt: null, Categorie: 'Serveur' } }),
-    prisma.asset.count({ where: { deletedAt: null, Categorie: 'Micro_ordinateur' } }),
-  ]);
+  try {
+    // Optimize: Use groupBy to get all asset counts in 2 queries instead of 8
+    const [assetsByValidation, assetsByCategory, workOrderStats] = await Promise.all([
+      // Single query to get counts by validation status (replaces 4 count queries)
+      prisma.asset.groupBy({
+        by: ['Validation'],
+        where: { deletedAt: null },
+        _count: { _all: true }
+      }),
+      // Single query to get counts by category (replaces 4 count queries)
+      prisma.asset.groupBy({
+        by: ['Categorie'],
+        where: { deletedAt: null },
+        _count: { _all: true }
+      }),
+      // Fetch all work orders once and process in memory (efficient for moderate datasets)
+      prisma.workOrder.findMany({
+        select: {
+          statut: true,
+          echeance: true,
+          createdAt: true
+        }
+      })
+    ]);
+
+    // Process asset validation data
+    const validationMap = assetsByValidation.reduce((acc, item) => {
+      acc[item.Validation] = item._count._all;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const actifsOK = validationMap['OK'] || 0;
+    const actifsAVerifier = validationMap['A_verifier'] || 0;
+    const actifsNonConformes = validationMap['Non_conforme'] || 0;
+    const actifsTotal = actifsOK + actifsAVerifier + actifsNonConformes;
+
+    // Process asset category data
+    const categoryMap = assetsByCategory.reduce((acc, item) => {
+      acc[item.Categorie] = item._count._all;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Process work order data in memory (single query instead of 4)
+    let woOuverts = 0;
+    let woEnRetard = 0;
+    let woCreated30 = 0;
+    let woCreatedPrev30 = 0;
+
+    workOrderStats.forEach(wo => {
+      // Count open work orders
+      if (['Ouvert', 'En cours', 'En attente'].includes(wo.statut)) {
+        woOuverts++;
+        // Count overdue work orders
+        if (['Ouvert', 'En cours'].includes(wo.statut) && wo.echeance && wo.echeance < now) {
+          woEnRetard++;
+        }
+      }
+      
+      // Count work orders created in last 30 days
+      if (wo.createdAt >= start30) {
+        woCreated30++;
+      }
+      
+      // Count work orders created in previous 30 days (30-60 days ago)
+      if (wo.createdAt >= start60 && wo.createdAt < start30) {
+        woCreatedPrev30++;
+      }
+    });
   
-  res.json({ 
-    woOuverts, 
-    woEnRetard, 
-    actifsTotal, 
-    actifsOK, 
-    actifsAVerifier, 
-    actifsNonConformes,
-    woCreated30,
-    woCreatedPrev30,
-    // Asset counts by category
-    assetsByCategory: {
-      Laptop: laptopCount,
-      Imprimante: imprimanteCount,
-      Serveur: serveurCount,
-      Micro_ordinateur: microCount
-    }
-  });
+    res.json({ 
+      woOuverts, 
+      woEnRetard, 
+      actifsTotal, 
+      actifsOK, 
+      actifsAVerifier, 
+      actifsNonConformes,
+      woCreated30,
+      woCreatedPrev30,
+      // Asset counts by category
+      assetsByCategory: {
+        Laptop: categoryMap['Laptop'] || 0,
+        Imprimante: categoryMap['Imprimante'] || 0,
+        Serveur: categoryMap['Serveur'] || 0,
+        Micro_ordinateur: categoryMap['Micro_ordinateur'] || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching KPIs:', error);
+    res.status(500).json({ message: 'Failed to fetch KPIs' });
+  }
 });
 
-dashboardRouter.get('/entite', requireAuth, async (_req: Request, res: Response) => {
+dashboardRouter.get('/entite', requireAuth, cacheMiddleware(CacheTTL.MEDIUM), async (_req: Request, res: Response) => {
   const byEntite = await prisma.asset.groupBy({ 
     by: ['Entite'], 
     _count: { _all: true },
@@ -119,7 +163,7 @@ dashboardRouter.get('/entite', requireAuth, async (_req: Request, res: Response)
   res.json(byEntite);
 });
 
-dashboardRouter.get('/categorie', requireAuth, async (_req: Request, res: Response) => {
+dashboardRouter.get('/categorie', requireAuth, cacheMiddleware(CacheTTL.MEDIUM), async (_req: Request, res: Response) => {
   const byCategorie = await prisma.asset.groupBy({ 
     by: ['Categorie'], 
     _count: { _all: true },
@@ -128,7 +172,7 @@ dashboardRouter.get('/categorie', requireAuth, async (_req: Request, res: Respon
   res.json(byCategorie);
 });
 
-dashboardRouter.get('/validation', requireAuth, async (_req: Request, res: Response) => {
+dashboardRouter.get('/validation', requireAuth, cacheMiddleware(CacheTTL.MEDIUM), async (_req: Request, res: Response) => {
   const byValidation = await prisma.asset.groupBy({ 
     by: ['Validation'], 
     _count: { _all: true },
@@ -137,7 +181,7 @@ dashboardRouter.get('/validation', requireAuth, async (_req: Request, res: Respo
   res.json(byValidation);
 });
 
-dashboardRouter.get('/etat', requireAuth, async (_req: Request, res: Response) => {
+dashboardRouter.get('/etat', requireAuth, cacheMiddleware(CacheTTL.MEDIUM), async (_req: Request, res: Response) => {
   const byEtat = await prisma.asset.groupBy({ 
     by: ['Etat'], 
     _count: { _all: true },
@@ -146,7 +190,7 @@ dashboardRouter.get('/etat', requireAuth, async (_req: Request, res: Response) =
   res.json(byEtat);
 });
 
-dashboardRouter.get('/marque', requireAuth, async (_req: Request, res: Response) => {
+dashboardRouter.get('/marque', requireAuth, cacheMiddleware(CacheTTL.LONG), async (_req: Request, res: Response) => {
   const byMarque = await prisma.asset.groupBy({ 
     by: ['Marque'], 
     _count: { _all: true },
@@ -157,106 +201,128 @@ dashboardRouter.get('/marque', requireAuth, async (_req: Request, res: Response)
   res.json(byMarque);
 });
 
-dashboardRouter.get('/activity', requireAuth, async (_req: Request, res: Response) => {
-  // Get asset creation activity over the last 30 days
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
-  const activity = await prisma.asset.findMany({
-    where: { 
-      deletedAt: null,
-      createdAt: { gte: thirtyDaysAgo }
-    },
-    select: { createdAt: true },
-    orderBy: { createdAt: 'asc' }
-  });
-
-  // Group by date
-  const activityByDate = activity.reduce((acc, asset) => {
-    const date = asset.createdAt.toISOString().split('T')[0];
-    acc[date] = (acc[date] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // Fill in missing dates with 0
-  const dates = [];
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    dates.push({
-      date: dateStr,
-      count: activityByDate[dateStr] || 0
+dashboardRouter.get('/activity', requireAuth, cacheMiddleware(CacheTTL.SHORT), async (_req: Request, res: Response) => {
+  try {
+    // Get asset creation activity over the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    // Optimized: Only select createdAt field to minimize data transfer
+    const activity = await prisma.asset.findMany({
+      where: { 
+        deletedAt: null,
+        createdAt: { gte: thirtyDaysAgo }
+      },
+      select: { createdAt: true },
+      orderBy: { createdAt: 'asc' }
     });
-  }
 
-  res.json(dates);
+    // Group by date
+    const activityByDate = activity.reduce((acc, asset) => {
+      const date = asset.createdAt.toISOString().split('T')[0];
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Fill in missing dates with 0
+    const dates = [];
+    for (let i = 30; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      dates.push({
+        date: dateStr,
+        count: activityByDate[dateStr] || 0
+      });
+    }
+
+    res.json(dates);
+  } catch (error) {
+    console.error('Error fetching activity data:', error);
+    res.status(500).json({ message: 'Failed to fetch activity data' });
+  }
 });
 
-dashboardRouter.get('/work-orders/monthly', requireAuth, async (_req: Request, res: Response) => {
-  // Get work order statistics for the last 12 months
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  
-  const workOrders = await prisma.workOrder.findMany({
-    where: { 
-      createdAt: { gte: oneYearAgo }
-    },
-    select: { 
-      createdAt: true,
-      statut: true,
-      echeance: true
-    }
-  });
-
-  // Group by month
-  const monthlyData = workOrders.reduce((acc, wo) => {
-    const month = wo.createdAt.toISOString().slice(0, 7); // YYYY-MM
-    if (!acc[month]) {
-      acc[month] = { created: 0, completed: 0, overdue: 0 };
-    }
-    acc[month].created++;
-    if (wo.statut === 'Terminé') acc[month].completed++;
-    if (wo.echeance && wo.echeance < new Date() && wo.statut !== 'Terminé') {
-      acc[month].overdue++;
-    }
-    return acc;
-  }, {} as Record<string, { created: number; completed: number; overdue: number }>);
-
-  // Convert to array and fill missing months
-  const months = [];
-  for (let i = 11; i >= 0; i--) {
-    const date = new Date();
-    date.setMonth(date.getMonth() - i);
-    const monthStr = date.toISOString().slice(0, 7);
-    months.push({
-      month: monthStr,
-      ...monthlyData[monthStr] || { created: 0, completed: 0, overdue: 0 }
+dashboardRouter.get('/work-orders/monthly', requireAuth, cacheMiddleware(CacheTTL.MEDIUM), async (_req: Request, res: Response) => {
+  try {
+    // Get work order statistics for the last 12 months
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    // Optimized: Select only required fields to minimize data transfer
+    const workOrders = await prisma.workOrder.findMany({
+      where: { 
+        createdAt: { gte: oneYearAgo }
+      },
+      select: { 
+        createdAt: true,
+        statut: true,
+        echeance: true
+      }
     });
-  }
 
-  res.json(months);
+    // Group by month
+    const monthlyData = workOrders.reduce((acc, wo) => {
+      const month = wo.createdAt.toISOString().slice(0, 7); // YYYY-MM
+      if (!acc[month]) {
+        acc[month] = { created: 0, completed: 0, overdue: 0 };
+      }
+      acc[month].created++;
+      if (wo.statut === 'Terminé') acc[month].completed++;
+      if (wo.echeance && wo.echeance < new Date() && wo.statut !== 'Terminé') {
+        acc[month].overdue++;
+      }
+      return acc;
+    }, {} as Record<string, { created: number; completed: number; overdue: number }>);
+
+    // Convert to array and fill missing months
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const monthStr = date.toISOString().slice(0, 7);
+      months.push({
+        month: monthStr,
+        ...monthlyData[monthStr] || { created: 0, completed: 0, overdue: 0 }
+      });
+    }
+
+    res.json(months);
+  } catch (error) {
+    console.error('Error fetching monthly work order data:', error);
+    res.status(500).json({ message: 'Failed to fetch monthly work order data' });
+  }
 });
 
-dashboardRouter.get('/health-score', requireAuth, async (_req: Request, res: Response) => {
-  const [total, ok, aVerifier, nonConforme] = await Promise.all([
-    prisma.asset.count({ where: { deletedAt: null } }),
-    prisma.asset.count({ where: { deletedAt: null, Validation: 'OK' } }),
-    prisma.asset.count({ where: { deletedAt: null, Validation: 'A_verifier' } }),
-    prisma.asset.count({ where: { deletedAt: null, Validation: 'Non_conforme' } }),
-  ]);
+dashboardRouter.get('/health-score', requireAuth, cacheMiddleware(CacheTTL.MEDIUM), async (_req: Request, res: Response) => {
+  try {
+    // Optimize: Use single groupBy query instead of 4 separate count queries
+    const validationStats = await prisma.asset.groupBy({
+      by: ['Validation'],
+      where: { deletedAt: null },
+      _count: { _all: true }
+    });
 
-  const healthScore = total > 0 ? Math.round((ok / total) * 100) : 0;
-  
-  res.json({
-    healthScore,
-    total,
-    breakdown: {
-      ok,
-      aVerifier,
-      nonConforme
-    }
-  });
+    const breakdown = validationStats.reduce((acc, item) => {
+      const count = item._count._all;
+      if (item.Validation === 'OK') acc.ok = count;
+      else if (item.Validation === 'A_verifier') acc.aVerifier = count;
+      else if (item.Validation === 'Non_conforme') acc.nonConforme = count;
+      return acc;
+    }, { ok: 0, aVerifier: 0, nonConforme: 0 });
+
+    const total = breakdown.ok + breakdown.aVerifier + breakdown.nonConforme;
+    const healthScore = total > 0 ? Math.round((breakdown.ok / total) * 100) : 0;
+    
+    res.json({
+      healthScore,
+      total,
+      breakdown
+    });
+  } catch (error) {
+    console.error('Error fetching health score:', error);
+    res.status(500).json({ message: 'Failed to fetch health score' });
+  }
 });
 
 dashboardRouter.get('/data-quality', requireAuth, requireRole('Admin'), async (_req: Request, res: Response) => {
@@ -375,7 +441,7 @@ dashboardRouter.get('/data-quality', requireAuth, requireRole('Admin'), async (_
 });
 
 // New endpoint: PM Plan statistics with periodicity breakdown
-dashboardRouter.get('/pm-stats', requireAuth, async (_req: Request, res: Response) => {
+dashboardRouter.get('/pm-stats', requireAuth, cacheMiddleware(CacheTTL.SHORT), async (_req: Request, res: Response) => {
   try {
     const plans = await prisma.pMPlan.findMany({
       where: { active: true },
