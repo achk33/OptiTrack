@@ -43,6 +43,20 @@ workOrdersRouter.patch('/:id', requireAuth, requireRole('Admin', 'Technicien'), 
   res.json(wo);
 });
 
+workOrdersRouter.delete('/:id', requireAuth, requireRole('Admin', 'Technicien'), async (req: Request, res: Response) => {
+  try {
+    await prisma.workOrder.delete({ where: { id: req.params.id } });
+    
+    // Invalidate dashboard cache after work order deletion
+    cache.invalidatePattern('/dashboard');
+    
+    res.status(204).send();
+  } catch (error) {
+    console.error('Failed to delete work order:', error);
+    res.status(500).json({ error: 'Failed to delete work order' });
+  }
+});
+
 workOrdersRouter.post('/:id/complete', requireAuth, requireRole('Admin', 'Technicien'), async (req: Request, res: Response) => {
   const { commentaires, tempsPasse, attachments, taches, resultEtat, resultValidation } = req.body as any;
   const updated = await prisma.workOrder.update({ where: { id: req.params.id }, data: { statut: 'Terminé', commentaires, tempsPasse, attachments, taches } });

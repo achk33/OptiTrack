@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { api, setAuthToken } from '../../components/api'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../../components/auth-context'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import CountUp from 'react-countup'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Area, AreaChart
@@ -29,9 +30,18 @@ import {
   Users,
   Zap,
   Shield,
-  Gauge
+  Gauge,
+  Plus,
+  Calendar,
+  FileText,
+  Clock,
+  Bell
 } from 'lucide-react'
 import { Progress, CircularProgress } from '../../components/ui/progress'
+
+const logger = {
+  error: (message: string, error?: any) => console.error(message, error)
+}
 
 type KPIData = {
   woOuverts: number;
@@ -118,6 +128,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [reportLoading, setReportLoading] = useState(false)
   const [detailedReportLoading, setDetailedReportLoading] = useState(false)
+  const [showAlerts, setShowAlerts] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -125,6 +137,11 @@ export default function DashboardPage() {
       router.replace('/login')
     }
   }, [isAuthenticated, hydrated, router])
+
+  // Set mounted state after hydration
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!isAuthenticated) return // Don't load data if not authenticated
@@ -188,7 +205,7 @@ export default function DashboardPage() {
       setHealthData(healthRes.data)
       setPmStats(pmStatsRes.data)
     } catch (error) {
-      console.error('Error loading dashboard data:', error)
+      logger.error('Error loading dashboard data:', error)
     } finally {
       setLoading(false)
     }
@@ -267,7 +284,7 @@ export default function DashboardPage() {
       document.body.removeChild(link)
       
     } catch (error) {
-      console.error('Error generating report:', error)
+      logger.error('Error generating report:', error)
     } finally {
       setReportLoading(false)
     }
@@ -493,6 +510,185 @@ export default function DashboardPage() {
               Rapport
             </Button>
           </div>
+        </motion.div>
+
+        {/* Smart Alerts Banner */}
+        <AnimatePresence>
+          {showAlerts && kpis && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-3"
+            >
+              {kpis.woEnRetard > 0 && (
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-500 rounded-lg p-3 flex items-center justify-between shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="bg-red-500 rounded-full p-1.5">
+                      <AlertTriangle className="h-4 w-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-red-900 text-sm">
+                        {kpis.woEnRetard} ordre{kpis.woEnRetard > 1 ? 's' : ''} de travail en retard
+                      </h3>
+                      <p className="text-red-600 text-xs mt-0.5">
+                        Action requise immédiate
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push('/workorders?statut=En retard')}
+                      className="bg-white hover:bg-red-50 text-red-700 border-red-300 text-xs px-3 py-1 h-7"
+                    >
+                      Voir
+                    </Button>
+                    <button
+                      onClick={() => setShowAlerts(false)}
+                      className="text-red-400 hover:text-red-600 p-0.5"
+                      aria-label="Fermer l'alerte"
+                      title="Fermer"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {kpis.actifsAVerifier > 5 && (
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="bg-gradient-to-r from-amber-50 to-amber-100 border-l-4 border-amber-500 rounded-lg p-3 flex items-center justify-between shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="bg-amber-500 rounded-full p-1.5">
+                      <Clock className="h-4 w-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-amber-900 text-sm">
+                        {kpis.actifsAVerifier} actifs nécessitent une vérification
+                      </h3>
+                      <p className="text-amber-600 text-xs mt-0.5">
+                        Validation en attente
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push('/assets?Validation=A_verifier')}
+                    className="bg-white hover:bg-amber-50 text-amber-700 border-amber-300 text-xs px-3 py-1 h-7"
+                  >
+                    Vérifier
+                  </Button>
+                </motion.div>
+              )}
+
+              {kpis.woOuverts > 0 && kpis.woEnRetard === 0 && (
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-500 rounded-lg p-3 flex items-center justify-between shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="bg-blue-500 rounded-full p-1.5">
+                      <Activity className="h-4 w-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-blue-900 text-sm">
+                        {kpis.woOuverts} ordre{kpis.woOuverts > 1 ? 's' : ''} de travail en cours
+                      </h3>
+                      <p className="text-blue-600 text-xs mt-0.5">
+                        Toutes les tâches sont à jour 🎯
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Quick Action Cards */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+        >
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => router.push('/workorders')}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-left shadow-lg hover:shadow-xl transition-all"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500" />
+            <div className="relative">
+              <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 w-fit mb-3">
+                <Plus className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-white font-semibold text-lg mb-1">Créer Ordre de Travail</h3>
+              <p className="text-blue-100 text-sm">Nouvelle tâche de maintenance</p>
+            </div>
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => router.push('/assets')}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-left shadow-lg hover:shadow-xl transition-all"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500" />
+            <div className="relative">
+              <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 w-fit mb-3">
+                <Server className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-white font-semibold text-lg mb-1">Ajouter Actif</h3>
+              <p className="text-emerald-100 text-sm">Enregistrer équipement IT</p>
+            </div>
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => router.push('/pmplans')}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 p-6 text-left shadow-lg hover:shadow-xl transition-all"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500" />
+            <div className="relative">
+              <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 w-fit mb-3">
+                <Calendar className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-white font-semibold text-lg mb-1">Plans de Maintenance</h3>
+              <p className="text-purple-100 text-sm">Programmation préventive</p>
+            </div>
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={generateReport}
+            disabled={reportLoading}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 p-6 text-left shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500" />
+            <div className="relative">
+              <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 w-fit mb-3">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-white font-semibold text-lg mb-1">Générer Rapport</h3>
+              <p className="text-amber-100 text-sm">Export CSV complet</p>
+            </div>
+          </motion.button>
         </motion.div>
 
         {/* Professional KPI Cards */}
@@ -831,10 +1027,91 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
+      {/* Mini Calendar Widget - Upcoming Maintenance */}
+      {pmStats && pmStats.upcomingMaintenance.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+        >
+          <Card className="overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-purple-50 to-blue-50 border-b">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-purple-100 rounded-lg p-2">
+                    <Calendar className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">Calendrier de Maintenance</CardTitle>
+                    <p className="text-sm text-slate-600 mt-1">Prochaines interventions programmées</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push('/pmplans')}
+                >
+                  Voir tous les plans
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-px bg-slate-200">
+                {pmStats.upcomingMaintenance.slice(0, 8).map((pm, index) => {
+                  const urgency = pm.daysUntil <= 7 ? 'urgent' : pm.daysUntil <= 14 ? 'soon' : 'normal'
+                  const colors = {
+                    urgent: 'from-red-50 to-red-100 border-red-200',
+                    soon: 'from-amber-50 to-amber-100 border-amber-200',
+                    normal: 'from-blue-50 to-blue-100 border-blue-200'
+                  }
+                  const textColors = {
+                    urgent: 'text-red-900',
+                    soon: 'text-amber-900',
+                    normal: 'text-blue-900'
+                  }
+                  const badgeColors = {
+                    urgent: 'bg-red-500 text-white',
+                    soon: 'bg-amber-500 text-white',
+                    normal: 'bg-blue-500 text-white'
+                  }
+
+                  return (
+                    <motion.div
+                      key={pm.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.05 }}
+                      className={`bg-gradient-to-br ${colors[urgency]} border-2 p-4 hover:shadow-md transition-all cursor-pointer`}
+                      onClick={() => router.push('/pmplans')}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className={`${badgeColors[urgency]} text-xs font-bold px-2 py-1 rounded-full`}>
+                          {pm.daysUntil}J
+                        </div>
+                        <div className="text-xs text-slate-500 uppercase tracking-wide">
+                          {pm.periodicite}
+                        </div>
+                      </div>
+                      <h4 className={`font-semibold text-sm ${textColors[urgency]} mb-1 line-clamp-2`}>
+                        {pm.name}
+                      </h4>
+                      <p className="text-xs text-slate-600">
+                        {format(parseISO(pm.nextRunAt), 'dd MMM yyyy', { locale: fr })}
+                      </p>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Categories Distribution */}
-        <ChartCard title="Répartition par catégorie" heightClass="h-[300px]">
+        {/* Categories Distribution - Interactive */}
+        {mounted && categorieData.length > 0 && (
+        <ChartCard title="Répartition par catégorie" heightClass="h-[300px]" description="Cliquez sur une section pour filtrer">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -850,17 +1127,42 @@ export default function DashboardPage() {
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="value"
+                onClick={(data) => {
+                  if (data && data.name) {
+                    router.push(`/assets?Categorie=${encodeURIComponent(data.name)}`)
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
               >
                 {categorieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={COLORS[index % COLORS.length]}
+                    className="hover:opacity-80 transition-opacity"
+                  />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip 
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    return (
+                      <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-200">
+                        <p className="font-semibold text-slate-900">{payload[0].name}</p>
+                        <p className="text-sm text-slate-600">{payload[0].value} actifs</p>
+                        <p className="text-xs text-blue-600 mt-1">📊 Cliquez pour filtrer</p>
+                      </div>
+                    )
+                  }
+                  return null
+                }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
+        )}
 
         {/* Validation Status */}
+        {mounted && validationData.length > 0 && (
         <ChartCard title="État de validation" heightClass="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={validationData}>
@@ -876,8 +1178,10 @@ export default function DashboardPage() {
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
+        )}
 
         {/* Activity */}
+        {mounted && activityData.length > 0 && (
         <ChartCard title="Activité des 30 derniers jours" heightClass="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={activityData}>
@@ -895,8 +1199,10 @@ export default function DashboardPage() {
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
+        )}
 
         {/* Top Brands */}
+        {mounted && marqueData.length > 0 && (
         <ChartCard title="Top 10 marques" heightClass="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={marqueData} layout="horizontal">
@@ -908,9 +1214,11 @@ export default function DashboardPage() {
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
+        )}
       </div>
 
       {/* Entity Distribution */}
+      {mounted && entiteData.length > 0 && (
       <ChartCard title="Répartition par entité" heightClass="h-[400px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={entiteData}>
@@ -923,9 +1231,10 @@ export default function DashboardPage() {
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
+      )}
 
       {/* Work Orders Monthly Trend */}
-      {workOrderData.length > 0 && (
+      {mounted && workOrderData.length > 0 && (
         <ChartCard title="Évolution des ordres de travail (12 derniers mois)" heightClass="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={workOrderData}>

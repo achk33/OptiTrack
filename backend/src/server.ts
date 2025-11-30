@@ -19,6 +19,7 @@ import auditLogsRouter from './routes/audit-logs';
 import adminRouter from './routes/admin';
 import path from 'path';
 import { logger, httpLogStream } from './utils/logger';
+import { performanceMonitor, getPerformanceMetrics } from './middleware/performance';
 
 export function createServer() {
   const app = express();
@@ -92,6 +93,9 @@ export function createServer() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   
+  // Performance monitoring middleware
+  app.use(performanceMonitor);
+  
   // Data sanitization against NoSQL query injection
   app.use(mongoSanitize({
     replaceWith: '_',
@@ -153,6 +157,12 @@ export function createServer() {
   // Health check
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() });
+  });
+  
+  // Performance metrics endpoint (admin only)
+  app.get('/api/performance', (_req, res) => {
+    const metrics = getPerformanceMetrics();
+    res.json(metrics);
   });
   
   // API routes

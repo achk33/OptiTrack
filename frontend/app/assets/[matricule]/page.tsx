@@ -125,19 +125,15 @@ export default function AssetDetailPage() {
 
   async function loadAssetData() {
     if (!hydrated || !isAuthenticated) {
-      console.log('⏸️ loadAssetData skipped - hydrated:', hydrated, 'isAuthenticated:', isAuthenticated)
       return
     }
     
     // Ensure token is set before making requests
     const token = localStorage.getItem('token')
     if (!token) {
-      console.error('❌ No token found in localStorage')
       setError('Session expirée. Veuillez vous reconnecter.')
       return
     }
-    
-    console.log('🔍 Loading asset data for:', matricule, 'with token:', token.substring(0, 20) + '...')
     
     try {
       setLoading(true)
@@ -173,9 +169,7 @@ export default function AssetDetailPage() {
   }
 
   async function handleSave() {
-    console.log('🔧 handleSave called', { canEditAsset, editableFields, editData })
     if (!canEditAsset) {
-      console.warn('⚠️ Save blocked: canEditAsset is false')
       return
     }
     try {
@@ -194,10 +188,7 @@ export default function AssetDetailPage() {
         return acc
       }, {} as Partial<Asset>)
 
-      console.log('📤 Sending payload:', payload)
       const response = await api.patch(`/assets/${matricule}`, payload)
-      const updatedAsset = response.data
-      console.log('✅ Save successful:', updatedAsset)
       
       // If Matricule was changed, navigate to the new matricule page
       if (payload.Matricule && payload.Matricule !== matricule) {

@@ -19,18 +19,17 @@ import {
 
 type PMPlan = {
   id: string
-  assetId: string
-  title: string
-  description: string | null
-  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY'
-  lastPerformed: string | null
-  nextDue: string | null
-  isActive: boolean
+  name: string
+  scopeType: string
+  scopeValue: string
+  periodicite: string
+  taches: any
+  ownerRole: string
+  nextRunAt: string | null
+  active: boolean
   createdAt: string
-  asset?: {
-    Matricule: string
-    NomPrenom: string
-  }
+  updatedAt: string
+  lastRunAt: string | null
 }
 
 export default function PMPlansPage() {
@@ -95,41 +94,38 @@ export default function PMPlansPage() {
   }
 
   const filteredPlans = pmPlans.filter(plan => {
-    const matchesSearch = plan.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         plan.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         plan.asset?.Matricule?.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFrequency = frequencyFilter === 'ALL' || plan.frequency === frequencyFilter
+    const matchesSearch = plan.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         plan.scopeValue?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesFrequency = frequencyFilter === 'ALL' || plan.periodicite === frequencyFilter
     const matchesStatus = statusFilter === 'ALL' || 
-                         (statusFilter === 'ACTIVE' && plan.isActive) ||
-                         (statusFilter === 'INACTIVE' && !plan.isActive)
+                         (statusFilter === 'ACTIVE' && plan.active) ||
+                         (statusFilter === 'INACTIVE' && !plan.active)
     return matchesSearch && matchesFrequency && matchesStatus
   })
 
   const getFrequencyLabel = (frequency: string) => {
-    switch (frequency) {
-      case 'DAILY': return 'Quotidien'
-      case 'WEEKLY': return 'Hebdomadaire'
-      case 'MONTHLY': return 'Mensuel'
-      case 'QUARTERLY': return 'Trimestriel'
-      case 'YEARLY': return 'Annuel'
+    switch (frequency?.toUpperCase()) {
+      case 'MIS': return 'Mensuel'
+      case 'TRI': return 'Trimestriel'
+      case 'SEMESTRE': return 'Semestriel'
+      case 'ANNUEL': return 'Annuel'
       default: return frequency
     }
   }
 
   const getFrequencyColor = (frequency: string) => {
-    switch (frequency) {
-      case 'DAILY': return 'bg-purple-100 text-purple-800 border-purple-200'
-      case 'WEEKLY': return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'MONTHLY': return 'bg-green-100 text-green-800 border-green-200'
-      case 'QUARTERLY': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'YEARLY': return 'bg-orange-100 text-orange-800 border-orange-200'
+    switch (frequency?.toUpperCase()) {
+      case 'MIS': return 'bg-green-100 text-green-800 border-green-200'
+      case 'TRI': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'SEMESTRE': return 'bg-blue-100 text-blue-800 border-blue-200'
+      case 'ANNUEL': return 'bg-orange-100 text-orange-800 border-orange-200'
       default: return 'bg-gray-100 text-gray-800 border-gray-200'
     }
   }
 
-  const isDueOrOverdue = (nextDue: string | null) => {
-    if (!nextDue) return false
-    const dueDate = new Date(nextDue)
+  const isDueOrOverdue = (nextRunAt: string | null) => {
+    if (!nextRunAt) return false
+    const dueDate = new Date(nextRunAt)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     return dueDate <= today
@@ -243,11 +239,10 @@ export default function PMPlansPage() {
             aria-label="Filtrer par fréquence"
           >
             <option value="ALL">Toutes les fréquences</option>
-            <option value="DAILY">Quotidien</option>
-            <option value="WEEKLY">Hebdomadaire</option>
-            <option value="MONTHLY">Mensuel</option>
-            <option value="QUARTERLY">Trimestriel</option>
-            <option value="YEARLY">Annuel</option>
+            <option value="MIS">Mensuel</option>
+            <option value="TRI">Trimestriel</option>
+            <option value="SEMESTRE">Semestriel</option>
+            <option value="ANNUEL">Annuel</option>
           </select>
 
           {/* Status Filter */}
@@ -287,8 +282,8 @@ export default function PMPlansPage() {
               <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-start gap-3 mb-3">
-                    {plan.isActive ? (
-                      isDueOrOverdue(plan.nextDue) ? (
+                    {plan.active ? (
+                      isDueOrOverdue(plan.nextRunAt) ? (
                         <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
                       ) : (
                         <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
@@ -296,32 +291,52 @@ export default function PMPlansPage() {
                     ) : (
                       <Clock className="h-5 w-5 text-gray-400 mt-0.5" />
                     )}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{plan.title}</h3>
-                      {plan.description && (
-                        <p className="text-gray-600 mt-1">{plan.description}</p>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">{plan.name}</h3>
+                      {plan.taches && (
+                        <div className="text-gray-700 mt-2">
+                          {(() => {
+                            try {
+                              const tasks = typeof plan.taches === 'string' ? JSON.parse(plan.taches) : plan.taches
+                              if (Array.isArray(tasks)) {
+                                return (
+                                  <ul className="space-y-1 text-sm">
+                                    {tasks.slice(0, 3).map((task: any, idx: number) => (
+                                      <li key={idx} className="flex items-start gap-2">
+                                        <span className="text-gray-400 mt-0.5">○</span>
+                                        <span>{task.label || task}</span>
+                                      </li>
+                                    ))}
+                                    {tasks.length > 3 && <li className="text-gray-500 text-xs">+{tasks.length - 3} autres tâches</li>}
+                                  </ul>
+                                )
+                              }
+                              return null
+                            } catch {
+                              return null
+                            }
+                          })()}
+                        </div>
                       )}
                     </div>
                   </div>
 
                   <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                    {plan.asset && (
-                      <div className="flex items-center gap-1">
-                        <span className="font-medium">Actif:</span>
-                        <span>{plan.asset.Matricule} - {plan.asset.NomPrenom}</span>
-                      </div>
-                    )}
-                    {plan.lastPerformed && (
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium">Type:</span>
+                      <span>{plan.scopeType} - {plan.scopeValue}</span>
+                    </div>
+                    {plan.lastRunAt && (
                       <div className="flex items-center gap-1">
                         <span className="font-medium">Dernière:</span>
-                        <span>{new Date(plan.lastPerformed).toLocaleDateString('fr-FR')}</span>
+                        <span>{new Date(plan.lastRunAt).toLocaleDateString('fr-FR')}</span>
                       </div>
                     )}
-                    {plan.nextDue && (
+                    {plan.nextRunAt && (
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
-                        <span className={isDueOrOverdue(plan.nextDue) ? 'font-semibold text-yellow-600' : ''}>
-                          {new Date(plan.nextDue).toLocaleDateString('fr-FR')}
+                        <span className={isDueOrOverdue(plan.nextRunAt) ? 'font-semibold text-yellow-600' : ''}>
+                          {new Date(plan.nextRunAt).toLocaleDateString('fr-FR')}
                         </span>
                       </div>
                     )}
@@ -330,15 +345,15 @@ export default function PMPlansPage() {
 
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFrequencyColor(plan.frequency)}`}>
-                      {getFrequencyLabel(plan.frequency)}
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFrequencyColor(plan.periodicite)}`}>
+                      {getFrequencyLabel(plan.periodicite)}
                     </span>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold border text-center ${
-                      plan.isActive 
+                      plan.active 
                         ? 'bg-green-100 text-green-800 border-green-200' 
                         : 'bg-gray-100 text-gray-800 border-gray-200'
                     }`}>
-                      {plan.isActive ? 'Actif' : 'Inactif'}
+                      {plan.active ? 'Actif' : 'Inactif'}
                     </span>
                   </div>
                   {isAdmin && (

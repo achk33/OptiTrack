@@ -1,12 +1,12 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from './auth-context'
 import { Button } from './ui/button'
 import { RoleBadge } from './ui/badge'
-import { Menu, X, Shield, BarChart3, Package, Upload, Database, Users, Activity } from 'lucide-react'
+import { Menu, X, Shield, BarChart3, Package, Upload, Database, Users, Activity, ChevronLeft, LogOut, User, Briefcase, ClipboardList, Calendar, Settings } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../lib/utils'
 
@@ -34,8 +34,22 @@ const NAV_LINKS: NavLink[] = [
     description: 'Gestion des équipements et matériels'
   },
   { 
+    href: '/workorders', 
+    label: 'Ordres de travail', 
+    icon: Briefcase,
+    roles: ['Admin', 'Technicien'],
+    description: 'Gestion des tâches et interventions'
+  },
+  { 
+    href: '/pmplans', 
+    label: 'Plans PM', 
+    icon: Calendar,
+    roles: ['Admin', 'Technicien'],
+    description: 'Maintenance préventive'
+  },
+  { 
     href: '/users', 
-    label: 'Users', 
+    label: 'Utilisateurs', 
     icon: Users,
     roles: ['Admin'],
     description: 'Gestion des utilisateurs et rôles'
@@ -49,7 +63,7 @@ const NAV_LINKS: NavLink[] = [
   },
   { 
     href: '/admin/audit-logs', 
-    label: 'Modifications Actifs', 
+    label: 'Audit', 
     icon: Database,
     roles: ['Admin'],
     description: 'Journal des modifications des actifs'
@@ -63,7 +77,7 @@ const NAV_LINKS: NavLink[] = [
   },
   { 
     href: '/data-quality', 
-    label: 'Quality', 
+    label: 'Qualité', 
     icon: Database,
     roles: ['Admin'],
     description: 'Analyse et contrôle qualité des données'
@@ -74,13 +88,22 @@ export function Navigation() {
   const router = useRouter()
   const pathname = usePathname()
   const { user, isAuthenticated, logout, hydrated } = useAuth()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [pathname])
+
+  // Update CSS variable for sidebar width
+  useEffect(() => {
+    const sidebarWidth = sidebarCollapsed ? '80px' : '280px'
+    document.documentElement.style.setProperty('--sidebar-width', sidebarWidth)
+  }, [sidebarCollapsed])
 
   const handleLogout = useCallback(async () => {
-    // Redirect immediately to avoid showing empty dashboard
     router.push('/login')
-    
-    // Then handle logout in background
     try {
       await logout()
     } catch (error) {
@@ -94,13 +117,11 @@ export function Navigation() {
 
   const filteredLinks = NAV_LINKS.filter(link => !user || link.roles.includes(user.role))
 
-  // Helper to get display name
   const getDisplayName = () => {
     if (!user) return 'User'
     return user.name || user.email || 'User'
   }
 
-  // Helper to get avatar initial
   const getAvatarInitial = () => {
     if (!user) return 'U'
     return (user.name?.charAt(0) || user.email?.charAt(0) || 'U').toUpperCase()
@@ -108,228 +129,192 @@ export function Navigation() {
 
   return (
     <>
-      <nav className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-soft sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            {/* Logo and Brand */}
-            <div className="flex items-center">
-              <Link href="/" className="flex-shrink-0 flex items-center group">
-                <div>
-                  <h1 className="text-xl font-bold bg-gradient-to-r from-brand-600 to-brand-800 bg-clip-text text-transparent group-hover:from-brand-700 group-hover:to-brand-900 transition-all duration-200">
-                    OptiTrack
-                  </h1>
-                  <p className="text-xs text-slate-500 font-medium">Asset Management</p>
-                </div>
-              </Link>
-            </div>
-
-            {/* Desktop Navigation */}
-            {hydrated && isAuthenticated && (
-              <div className="hidden lg:flex items-center space-x-2">
-                {filteredLinks.map((link) => {
-                const Icon = link.icon
-                const isActive = pathname === link.href
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={cn(
-                      "relative flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 group",
-                      isActive
-                        ? "bg-brand-50 text-brand-700 shadow-soft"
-                        : "text-slate-600 hover:text-brand-700 hover:bg-slate-50"
-                    )}
-                  >
-                    <Icon className={cn(
-                      "h-4 w-4 transition-colors duration-200",
-                      isActive ? "text-brand-600" : "text-slate-400 group-hover:text-brand-600"
-                    )} />
-                    <span>{link.label}</span>
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeTab"
-                        className="absolute inset-0 bg-brand-50 border-2 border-brand-200/50 rounded-xl -z-10"
-                        initial={false}
-                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                      />
-                    )}
-                  </Link>
-                )
-              })}
-              </div>
-            )}
-
-            {/* User Actions */}
-            <div className="flex items-center space-x-4">
-              {/* User Info */}
-              {hydrated && isAuthenticated && user && (
-                <Link href="/profile" className="hidden md:flex items-center space-x-3 hover:opacity-80 transition-opacity">
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-slate-900">{getDisplayName()}</p>
-                    <RoleBadge role={user.role || 'Lecteur'} className="text-xs" />
-                  </div>
-                  <div className="h-8 w-8 bg-gradient-to-br from-brand-400 to-brand-600 rounded-full flex items-center justify-center ring-2 ring-transparent hover:ring-brand-300 transition-all">
-                    <span className="text-xs font-bold text-white">
-                      {getAvatarInitial()}
-                    </span>
-                  </div>
-                </Link>
-              )}
-
-              {/* Auth Buttons */}
-              <div className="flex items-center space-x-2">
-                {hydrated && (
-                  <>
-                    {isAuthenticated ? (
-                      <Button
-                        onClick={handleLogout}
-                        variant="ghost"
-                        size="sm"
-                        className="hidden md:inline-flex"
-                      >
-                        Déconnexion
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handleLogin}
-                        size="sm"
-                        className="hidden md:inline-flex"
-                      >
-                        Connexion
-                      </Button>
-                    )}
-                  </>
-                )}
-
-                {/* Mobile Menu Button */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="lg:hidden"
-                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                >
-                  {mobileMenuOpen ? (
-                    <X className="h-5 w-5" />
-                  ) : (
-                    <Menu className="h-5 w-5" />
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
+      {/* Top Bar - Mobile Only */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 z-50 flex items-center px-4">
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+          aria-label="Toggle navigation menu"
+        >
+          <Menu className="h-6 w-6 text-slate-700" />
+        </button>
+        <div className="ml-4 flex-1">
+          <h1 className="text-lg font-bold bg-gradient-to-r from-brand-600 to-brand-800 bg-clip-text text-transparent">
+            OptiTrack
+          </h1>
         </div>
-      </nav>
+        {hydrated && isAuthenticated && user && (
+          <Link href="/profile" className="flex items-center space-x-2">
+            <div className="h-9 w-9 bg-gradient-to-br from-brand-400 to-brand-600 rounded-full flex items-center justify-center">
+              <span className="text-sm font-bold text-white">{getAvatarInitial()}</span>
+            </div>
+          </Link>
+        )}
+      </div>
 
-      {/* Mobile Menu */}
+      {/* Backdrop - Mobile */}
       <AnimatePresence>
-        {mobileMenuOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-            
-            {/* Mobile Menu Panel */}
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="absolute top-16 inset-x-0 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-strong z-50 lg:hidden"
-            >
-              <div className="px-4 py-6 space-y-4">
-                {/* User Info Mobile */}
-                {hydrated && isAuthenticated && user && (
-                  <Link 
-                    href="/profile" 
-                    className="flex items-center space-x-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <div className="h-10 w-10 bg-gradient-to-br from-brand-400 to-brand-600 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-bold text-white">
-                        {getAvatarInitial()}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-900">{getDisplayName()}</p>
-                      <RoleBadge role={user.role || 'Lecteur'} className="text-xs" />
-                    </div>
-                  </Link>
-                )}
-
-                {/* Mobile Navigation Links */}
-                {hydrated && isAuthenticated && (
-                  <div className="space-y-2">
-                    {filteredLinks.map((link) => {
-                      const Icon = link.icon
-                      const isActive = pathname === link.href
-                      return (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          className={cn(
-                            "flex items-center space-x-3 p-4 rounded-xl transition-all duration-200",
-                            isActive
-                              ? "bg-brand-50 text-brand-700 border border-brand-200"
-                              : "text-slate-600 hover:bg-slate-50"
-                          )}
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          <Icon className={cn(
-                            "h-5 w-5",
-                            isActive ? "text-brand-600" : "text-slate-400"
-                          )} />
-                          <div>
-                            <p className="font-medium">{link.label}</p>
-                            {link.description && (
-                              <p className="text-xs text-slate-500 mt-1">{link.description}</p>
-                            )}
-                          </div>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* Mobile Auth Button */}
-                <div className="pt-4 border-t border-slate-200">
-                  {hydrated && (
-                    <>
-                      {isAuthenticated ? (
-                        <Button
-                          onClick={() => {
-                            handleLogout()
-                            setMobileMenuOpen(false)
-                          }}
-                          variant="outline"
-                          className="w-full"
-                        >
-                          Déconnexion
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={() => {
-                            handleLogin()
-                            setMobileMenuOpen(false)
-                          }}
-                          className="w-full"
-                        >
-                          Connexion
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+          />
         )}
       </AnimatePresence>
+
+      {/* Vertical Sidebar */}
+      <aside
+        className={cn(
+          "fixed top-0 left-0 h-screen bg-white border-r border-slate-200 z-50 flex flex-col shadow-xl transition-all duration-300",
+          "lg:translate-x-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          sidebarCollapsed ? "lg:w-20" : "lg:w-[280px]",
+          "w-[280px]"
+        )}
+      >
+        {/* Sidebar Header */}
+        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200">
+          {!sidebarCollapsed ? (
+            <Link href="/" className="flex items-center space-x-3 group">
+              <img 
+                src="/Logo.png" 
+                alt="OptiTrack Logo" 
+                className="h-10 w-10 object-contain"
+              />
+              <div>
+                <h1 className="text-lg font-bold bg-gradient-to-r from-brand-600 to-brand-800 bg-clip-text text-transparent">
+                  OptiTrack
+                </h1>
+                <p className="text-xs text-slate-500">Asset Management</p>
+              </div>
+            </Link>
+          ) : (
+            <Link href="/" className="flex items-center justify-center w-full group">
+              <img 
+                src="/Logo.png" 
+                alt="OptiTrack Logo" 
+                className="h-10 w-10 object-contain"
+              />
+            </Link>
+          )}
+          
+          {/* Collapse Button - Desktop Only */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="hidden lg:flex p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <ChevronLeft className={cn(
+              "h-5 w-5 text-slate-600 transition-transform",
+              sidebarCollapsed && "rotate-180"
+            )} />
+          </button>
+
+          {/* Close Button - Mobile Only */}
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Close navigation menu"
+          >
+            <X className="h-5 w-5 text-slate-600" />
+          </button>
+        </div>
+
+        {/* User Profile Section */}
+        {hydrated && isAuthenticated && user && (
+          <div className="p-4 border-b border-slate-200">
+            <Link
+              href="/profile"
+              className={cn(
+                "flex items-center space-x-3 p-3 rounded-xl hover:bg-slate-50 transition-all group",
+                sidebarCollapsed && "justify-center"
+              )}
+            >
+              <div className="h-10 w-10 bg-gradient-to-br from-brand-400 to-brand-600 rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-transparent group-hover:ring-brand-200 transition-all">
+                <span className="text-sm font-bold text-white">{getAvatarInitial()}</span>
+              </div>
+              {!sidebarCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{getDisplayName()}</p>
+                  <RoleBadge role={user.role || 'Lecteur'} className="text-xs mt-1" />
+                </div>
+              )}
+            </Link>
+          </div>
+        )}
+
+        {/* Navigation Links */}
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+          {hydrated && isAuthenticated && filteredLinks.map((link) => {
+            const Icon = link.icon
+            const isActive = pathname === link.href
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  "relative flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group",
+                  isActive
+                    ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/30"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-brand-600",
+                  sidebarCollapsed && "justify-center px-2"
+                )}
+                title={sidebarCollapsed ? link.label : undefined}
+              >
+                <Icon className={cn(
+                  "h-5 w-5 flex-shrink-0 transition-colors",
+                  isActive ? "text-white" : "text-slate-400 group-hover:text-brand-600"
+                )} />
+                {!sidebarCollapsed && (
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate">{link.label}</p>
+                    {link.description && !isActive && (
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        {link.description}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {isActive && !sidebarCollapsed && (
+                  <div className="w-1 h-8 bg-white rounded-full absolute right-2" />
+                )}
+              </Link>
+            )
+          })}
+        </nav>
+
+        {/* Bottom Actions */}
+        <div className="border-t border-slate-200 p-4 space-y-2">
+          {hydrated && isAuthenticated ? (
+            <button
+              onClick={handleLogout}
+              className={cn(
+                "w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all",
+                sidebarCollapsed && "justify-center px-2"
+              )}
+              title={sidebarCollapsed ? "Déconnexion" : undefined}
+            >
+              <LogOut className="h-5 w-5 flex-shrink-0" />
+              {!sidebarCollapsed && <span>Déconnexion</span>}
+            </button>
+          ) : (
+            <button
+              onClick={handleLogin}
+              className={cn(
+                "w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 transition-all",
+                sidebarCollapsed && "justify-center px-2"
+              )}
+              title={sidebarCollapsed ? "Connexion" : undefined}
+            >
+              <User className="h-5 w-5 flex-shrink-0" />
+              {!sidebarCollapsed && <span>Connexion</span>}
+            </button>
+          )}
+        </div>
+      </aside>
     </>
   )
 }

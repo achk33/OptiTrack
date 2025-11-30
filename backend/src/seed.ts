@@ -91,7 +91,7 @@ async function main() {
     create: {
       id: 'seed-plan-1', name: 'PM Laptop Siège', scopeType: 'Entite', scopeValue: 'Siège',
       periodicite: 'MIS', taches: [{ label: 'Nettoyage', done: false }, { label: 'MAJ OS', done: false }],
-      ownerRole: 'Technicien', nextRunAt: new Date(), active: true
+      ownerRole: 'TECHNICIEN', nextRunAt: new Date(), active: true
     } as any
   });
 

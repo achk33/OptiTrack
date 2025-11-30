@@ -5,13 +5,12 @@ import { X, Save, AlertCircle } from 'lucide-react'
 import { api } from './api'
 
 type WorkOrderFormData = {
-  assetId: string
-  title: string
-  description: string
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
-  assignedTo: string
-  dueDate: string
+  assetMatricule: string
+  taches: string
+  priorite: string
+  statut: string
+  assigne: string
+  echeance: string
 }
 
 type Asset = {
@@ -30,13 +29,12 @@ type WorkOrderModalProps = {
 
 export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: WorkOrderModalProps) {
   const [formData, setFormData] = useState<WorkOrderFormData>({
-    assetId: '',
-    title: '',
-    description: '',
-    priority: 'MEDIUM',
-    status: 'PENDING',
-    assignedTo: '',
-    dueDate: '',
+    assetMatricule: '',
+    taches: '',
+    priorite: 'Moyenne',
+    statut: 'En attente',
+    assigne: '',
+    echeance: '',
   })
   const [assets, setAssets] = useState<Asset[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -48,23 +46,21 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
       loadAssets()
       if (mode === 'edit' && workOrder) {
         setFormData({
-          assetId: workOrder.assetId || '',
-          title: workOrder.title || '',
-          description: workOrder.description || '',
-          priority: workOrder.priority || 'MEDIUM',
-          status: workOrder.status || 'PENDING',
-          assignedTo: workOrder.assignedTo || '',
-          dueDate: workOrder.dueDate ? new Date(workOrder.dueDate).toISOString().split('T')[0] : '',
+          assetMatricule: workOrder.assetMatricule || '',
+          taches: typeof workOrder.taches === 'string' ? workOrder.taches : JSON.stringify(workOrder.taches) || '',
+          priorite: workOrder.priorite || 'Moyenne',
+          statut: workOrder.statut || 'En attente',
+          assigne: workOrder.assigne || '',
+          echeance: workOrder.echeance ? new Date(workOrder.echeance).toISOString().split('T')[0] : '',
         })
       } else {
         setFormData({
-          assetId: '',
-          title: '',
-          description: '',
-          priority: 'MEDIUM',
-          status: 'PENDING',
-          assignedTo: '',
-          dueDate: '',
+          assetMatricule: '',
+          taches: '',
+          priorite: 'Moyenne',
+          statut: 'En attente',
+          assigne: '',
+          echeance: '',
         })
       }
       setError('')
@@ -75,9 +71,12 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
     try {
       setIsLoadingAssets(true)
       const response = await api.get('/assets')
-      setAssets(response.data)
+      // Backend may return { items: [] } or direct array
+      const data = response.data.items || response.data
+      setAssets(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to load assets:', err)
+      setAssets([])
     } finally {
       setIsLoadingAssets(false)
     }
@@ -87,7 +86,7 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
     e.preventDefault()
     setError('')
 
-    if (!formData.assetId || !formData.title) {
+    if (!formData.assetMatricule || !formData.taches) {
       setError('Veuillez remplir tous les champs obligatoires')
       return
     }
@@ -96,14 +95,21 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
 
     try {
       const payload = {
-        ...formData,
-        dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
+        assetMatricule: formData.assetMatricule,
+        taches: formData.taches,
+        priorite: formData.priorite,
+        statut: formData.statut,
+        assigne: formData.assigne || null,
+        echeance: formData.echeance ? new Date(formData.echeance).toISOString() : new Date().toISOString(),
+        commentaires: [],
+        tempsPasse: 0,
+        attachments: []
       }
 
       if (mode === 'create') {
         await api.post('/workorders', payload)
       } else {
-        await api.put(`/workorders/${workOrder.id}`, payload)
+        await api.patch(`/workorders/${workOrder.id}`, payload)
       }
 
       onSuccess()
@@ -152,8 +158,8 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
               <div className="text-sm text-gray-500">Chargement des actifs...</div>
             ) : (
               <select
-                value={formData.assetId}
-                onChange={(e) => setFormData({ ...formData, assetId: e.target.value })}
+                value={formData.assetMatricule}
+                onChange={(e) => setFormData({ ...formData, assetMatricule: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
                 disabled={isLoading}
@@ -169,33 +175,18 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
             )}
           </div>
 
-          {/* Title */}
+          {/* Tasks/Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Titre <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="Ex: Maintenance préventive trimestrielle"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
+              Tâches / Description <span className="text-red-500">*</span>
             </label>
             <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              value={formData.taches}
+              onChange={(e) => setFormData({ ...formData, taches: e.target.value })}
               placeholder="Détails de l'intervention..."
               rows={4}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              required
               disabled={isLoading}
             />
           </div>
@@ -207,16 +198,16 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
                 Priorité
               </label>
               <select
-                value={formData.priority}
-                onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
+                value={formData.priorite}
+                onChange={(e) => setFormData({ ...formData, priorite: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={isLoading}
                 aria-label="Sélectionner la priorité"
               >
-                <option value="LOW">Basse</option>
-                <option value="MEDIUM">Moyenne</option>
-                <option value="HIGH">Haute</option>
-                <option value="URGENT">Urgent</option>
+                <option value="Basse">Basse</option>
+                <option value="Moyenne">Moyenne</option>
+                <option value="Haute">Haute</option>
+                <option value="Urgente">Urgente</option>
               </select>
             </div>
 
@@ -225,16 +216,16 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
                 Statut
               </label>
               <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                value={formData.statut}
+                onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={isLoading}
                 aria-label="Sélectionner le statut"
               >
-                <option value="PENDING">En attente</option>
-                <option value="IN_PROGRESS">En cours</option>
-                <option value="COMPLETED">Terminé</option>
-                <option value="CANCELLED">Annulé</option>
+                <option value="En attente">En attente</option>
+                <option value="En cours">En cours</option>
+                <option value="Terminé">Terminé</option>
+                <option value="Annulé">Annulé</option>
               </select>
             </div>
           </div>
@@ -247,8 +238,8 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
               </label>
               <input
                 type="text"
-                value={formData.assignedTo}
-                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
+                value={formData.assigne}
+                onChange={(e) => setFormData({ ...formData, assigne: e.target.value })}
                 placeholder="Nom du technicien"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={isLoading}
@@ -261,8 +252,8 @@ export function WorkOrderModal({ isOpen, onClose, onSuccess, workOrder, mode }: 
               </label>
               <input
                 type="date"
-                value={formData.dueDate}
-                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                value={formData.echeance}
+                onChange={(e) => setFormData({ ...formData, echeance: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={isLoading}
                 aria-label="Date d'échéance"

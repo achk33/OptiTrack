@@ -5,18 +5,21 @@ import { X, Save, AlertCircle } from 'lucide-react'
 import { api } from './api'
 
 type PMPlanFormData = {
-  assetId: string
-  title: string
-  description: string
-  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY'
-  isActive: boolean
-  nextDue: string
+  name: string
+  scopeType: 'ASSET' | 'CATEGORY' | 'ENTITY'
+  scopeValue: string
+  periodicite: 'MIS' | 'TRI' | 'SEMESTRE' | 'ANNUEL'
+  taches: string
+  ownerRole: 'Admin' | 'Manager' | 'Technician'
+  active: boolean
+  nextRunAt: string
 }
 
 type Asset = {
   Matricule: string
   NomPrenom: string
   Categorie: string
+  Entite?: string
 }
 
 type PMPlanModalProps = {
@@ -29,14 +32,18 @@ type PMPlanModalProps = {
 
 export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlanModalProps) {
   const [formData, setFormData] = useState<PMPlanFormData>({
-    assetId: '',
-    title: '',
-    description: '',
-    frequency: 'MONTHLY',
-    isActive: true,
-    nextDue: '',
+    name: '',
+    scopeType: 'ASSET',
+    scopeValue: '',
+    periodicite: 'MIS',
+    taches: '',
+    ownerRole: 'Technician',
+    active: true,
+    nextRunAt: '',
   })
   const [assets, setAssets] = useState<Asset[]>([])
+  const [categories, setCategories] = useState<string[]>([])
+  const [entities, setEntities] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingAssets, setIsLoadingAssets] = useState(true)
   const [error, setError] = useState('')
@@ -45,26 +52,41 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
     if (isOpen) {
       loadAssets()
       if (mode === 'edit' && pmPlan) {
+        // Parse taches JSON if it's a string
+        let tachesString = ''
+        try {
+          const tachesArray = typeof pmPlan.taches === 'string' ? JSON.parse(pmPlan.taches) : pmPlan.taches
+          tachesString = Array.isArray(tachesArray) 
+            ? tachesArray.map((t: any) => t.label).join('\n')
+            : ''
+        } catch {
+          tachesString = ''
+        }
+
         setFormData({
-          assetId: pmPlan.assetId || '',
-          title: pmPlan.title || '',
-          description: pmPlan.description || '',
-          frequency: pmPlan.frequency || 'MONTHLY',
-          isActive: pmPlan.isActive ?? true,
-          nextDue: pmPlan.nextDue ? new Date(pmPlan.nextDue).toISOString().split('T')[0] : '',
+          name: pmPlan.name || '',
+          scopeType: pmPlan.scopeType || 'ASSET',
+          scopeValue: pmPlan.scopeValue || '',
+          periodicite: pmPlan.periodicite || 'MIS',
+          taches: tachesString,
+          ownerRole: pmPlan.ownerRole || 'Technician',
+          active: pmPlan.active ?? true,
+          nextRunAt: pmPlan.nextRunAt ? new Date(pmPlan.nextRunAt).toISOString().split('T')[0] : '',
         })
       } else {
         // Default to 30 days from now for new plans
-        const defaultNextDue = new Date()
-        defaultNextDue.setDate(defaultNextDue.getDate() + 30)
+        const defaultNextRun = new Date()
+        defaultNextRun.setDate(defaultNextRun.getDate() + 30)
         
         setFormData({
-          assetId: '',
-          title: '',
-          description: '',
-          frequency: 'MONTHLY',
-          isActive: true,
-          nextDue: defaultNextDue.toISOString().split('T')[0],
+          name: '',
+          scopeType: 'ASSET',
+          scopeValue: '',
+          periodicite: 'MIS',
+          taches: '',
+          ownerRole: 'Technician',
+          active: true,
+          nextRunAt: defaultNextRun.toISOString().split('T')[0],
         })
       }
       setError('')
@@ -75,7 +97,17 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
     try {
       setIsLoadingAssets(true)
       const response = await api.get('/assets')
-      setAssets(response.data)
+      // Handle pagination
+      const data = response.data.items || response.data
+      setAssets(Array.isArray(data) ? data : [])
+      
+      // Extract unique categories and entities
+      if (Array.isArray(data)) {
+        const uniqueCategories = [...new Set(data.map((a: Asset) => a.Categorie).filter(Boolean))]
+        const uniqueEntities = [...new Set(data.map((a: Asset) => a.Entite).filter(Boolean))]
+        setCategories(uniqueCategories as string[])
+        setEntities(uniqueEntities as string[])
+      }
     } catch (err) {
       console.error('Failed to load assets:', err)
     } finally {
@@ -87,7 +119,7 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
     e.preventDefault()
     setError('')
 
-    if (!formData.assetId || !formData.title) {
+    if (!formData.name || !formData.scopeValue || !formData.taches) {
       setError('Veuillez remplir tous les champs obligatoires')
       return
     }
@@ -95,15 +127,28 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
     setIsLoading(true)
 
     try {
+      // Convert taches from string to JSON array
+      const tachesLines = formData.taches.split('\n').filter(line => line.trim())
+      const tachesArray = tachesLines.map(line => ({
+        label: line.trim(),
+        done: false
+      }))
+
       const payload = {
-        ...formData,
-        nextDue: formData.nextDue ? new Date(formData.nextDue).toISOString() : null,
+        name: formData.name,
+        scopeType: formData.scopeType,
+        scopeValue: formData.scopeValue,
+        periodicite: formData.periodicite,
+        taches: tachesArray,
+        ownerRole: formData.ownerRole,
+        active: formData.active,
+        nextRunAt: formData.nextRunAt ? new Date(formData.nextRunAt).toISOString() : null,
       }
 
       if (mode === 'create') {
         await api.post('/pmplans', payload)
       } else {
-        await api.put(`/pmplans/${pmPlan.id}`, payload)
+        await api.patch(`/pmplans/${pmPlan.id}`, payload)
       }
 
       onSuccess()
@@ -112,17 +157,6 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
       setError(err.response?.data?.error || 'Erreur lors de la sauvegarde')
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const getFrequencyDescription = (freq: string) => {
-    switch (freq) {
-      case 'DAILY': return 'Tous les jours'
-      case 'WEEKLY': return 'Toutes les semaines'
-      case 'MONTHLY': return 'Tous les mois'
-      case 'QUARTERLY': return 'Tous les 3 mois'
-      case 'YEARLY': return 'Tous les ans'
-      default: return ''
     }
   }
 
@@ -154,41 +188,15 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
             </div>
           )}
 
-          {/* Asset Selection */}
+          {/* Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Actif <span className="text-red-500">*</span>
-            </label>
-            {isLoadingAssets ? (
-              <div className="text-sm text-gray-500">Chargement des actifs...</div>
-            ) : (
-              <select
-                value={formData.assetId}
-                onChange={(e) => setFormData({ ...formData, assetId: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-                disabled={isLoading}
-                aria-label="Sélectionner un actif"
-              >
-                <option value="">Sélectionner un actif</option>
-                {assets.map((asset) => (
-                  <option key={asset.Matricule} value={asset.Matricule}>
-                    {asset.Matricule} - {asset.NomPrenom} ({asset.Categorie})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Titre <span className="text-red-500">*</span>
+              Nom du plan <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="Ex: Maintenance préventive mensuelle"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
@@ -196,60 +204,131 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
             />
           </div>
 
-          {/* Description */}
+          {/* Scope Type */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Détails des tâches de maintenance..."
-              rows={4}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              disabled={isLoading}
-            />
-          </div>
-
-          {/* Frequency */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Fréquence <span className="text-red-500">*</span>
+              Type de portée <span className="text-red-500">*</span>
             </label>
             <select
-              value={formData.frequency}
-              onChange={(e) => setFormData({ ...formData, frequency: e.target.value as any })}
+              value={formData.scopeType}
+              onChange={(e) => setFormData({ ...formData, scopeType: e.target.value as any, scopeValue: '' })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isLoading}
-              aria-label="Sélectionner la fréquence"
+              aria-label="Type de portée"
             >
-              <option value="DAILY">Quotidien</option>
-              <option value="WEEKLY">Hebdomadaire</option>
-              <option value="MONTHLY">Mensuel</option>
-              <option value="QUARTERLY">Trimestriel</option>
-              <option value="YEARLY">Annuel</option>
+              <option value="ASSET">Actif spécifique</option>
+              <option value="CATEGORY">Catégorie d'actifs</option>
+              <option value="ENTITY">Entité</option>
             </select>
-            <p className="text-sm text-gray-500 mt-1">
-              📅 {getFrequencyDescription(formData.frequency)}
+          </div>
+
+          {/* Scope Value */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {formData.scopeType === 'ASSET' && 'Actif'}
+              {formData.scopeType === 'CATEGORY' && 'Catégorie'}
+              {formData.scopeType === 'ENTITY' && 'Entité'}
+              {' '}<span className="text-red-500">*</span>
+            </label>
+            {isLoadingAssets ? (
+              <div className="text-sm text-gray-500">Chargement...</div>
+            ) : (
+              <select
+                value={formData.scopeValue}
+                onChange={(e) => setFormData({ ...formData, scopeValue: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+                disabled={isLoading}
+                aria-label="Sélectionner la valeur de portée"
+              >
+                <option value="">Sélectionner...</option>
+                {formData.scopeType === 'ASSET' && assets.map((asset) => (
+                  <option key={asset.Matricule} value={asset.Matricule}>
+                    {asset.Matricule} - {asset.NomPrenom} ({asset.Categorie})
+                  </option>
+                ))}
+                {formData.scopeType === 'CATEGORY' && categories.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+                {formData.scopeType === 'ENTITY' && entities.map((ent) => (
+                  <option key={ent} value={ent}>{ent}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Periodicite */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Périodicité <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={formData.periodicite}
+              onChange={(e) => setFormData({ ...formData, periodicite: e.target.value as any })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={isLoading}
+              aria-label="Périodicité"
+            >
+              <option value="MIS">Mensuel</option>
+              <option value="TRI">Trimestriel</option>
+              <option value="SEMESTRE">Semestriel</option>
+              <option value="ANNUEL">Annuel</option>
+            </select>
+          </div>
+
+          {/* Taches */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tâches <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={formData.taches}
+              onChange={(e) => setFormData({ ...formData, taches: e.target.value })}
+              placeholder="Une tâche par ligne...&#10;Ex:&#10;Vérifier les niveaux&#10;Nettoyer les filtres&#10;Inspecter les câbles"
+              rows={6}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-sm"
+              required
+              disabled={isLoading}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Une tâche par ligne. Ces tâches seront ajoutées aux ordres de travail générés.
             </p>
           </div>
 
-          {/* Next Due Date */}
+          {/* Owner Role */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Prochaine échéance <span className="text-red-500">*</span>
+              Rôle responsable <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={formData.ownerRole}
+              onChange={(e) => setFormData({ ...formData, ownerRole: e.target.value as any })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={isLoading}
+              aria-label="Rôle responsable"
+            >
+              <option value="Admin">Administrateur</option>
+              <option value="Manager">Manager</option>
+              <option value="Technician">Technicien</option>
+            </select>
+          </div>
+
+          {/* Next Run At */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Prochaine exécution <span className="text-red-500">*</span>
             </label>
             <input
               type="date"
-              value={formData.nextDue}
-              onChange={(e) => setFormData({ ...formData, nextDue: e.target.value })}
+              value={formData.nextRunAt}
+              onChange={(e) => setFormData({ ...formData, nextRunAt: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
               disabled={isLoading}
-              aria-label="Prochaine échéance"
+              aria-label="Prochaine exécution"
             />
             <p className="text-sm text-gray-500 mt-1">
-              Date de la première ou prochaine maintenance planifiée
+              Date à laquelle le plan générera le prochain ordre de travail
             </p>
           </div>
 
@@ -258,8 +337,8 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
             <input
               type="checkbox"
               id="isActive"
-              checked={formData.isActive}
-              onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+              checked={formData.active}
+              onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
               className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
               disabled={isLoading}
             />
@@ -268,7 +347,7 @@ export function PMPlanModal({ isOpen, onClose, onSuccess, pmPlan, mode }: PMPlan
                 Plan actif
               </span>
               <span className="block text-sm text-gray-500">
-                {formData.isActive 
+                {formData.active 
                   ? 'Ce plan générera automatiquement des ordres de travail' 
                   : 'Ce plan est désactivé et ne générera pas d\'ordres de travail'}
               </span>

@@ -1,6 +1,7 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../lib/utils"
+import CountUp from 'react-countup'
 
 const cardVariants = cva(
   "rounded-2xl border bg-white transition-all duration-200",
@@ -111,7 +112,16 @@ export function StatsCard({
           <div className="flex-1">
             <p className="text-sm font-medium text-slate-600 mb-1">{title}</p>
             <div className="flex items-baseline gap-2 mb-2">
-              <p className="text-3xl font-bold text-slate-900">{typeof value === 'number' ? value.toLocaleString('fr-FR') : value}</p>
+              <p className="text-3xl font-bold text-slate-900">
+                {typeof value === 'number' ? (
+                  <CountUp 
+                    end={value} 
+                    duration={1.5} 
+                    separator=" "
+                    preserveValue
+                  />
+                ) : value}
+              </p>
               {trend && trendValue && (
                 <span className={cn("text-sm font-semibold flex items-center gap-1", trendColors[trend])}>
                   <span className="text-base">{trendIcons[trend]}</span>

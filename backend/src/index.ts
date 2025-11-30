@@ -13,10 +13,10 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
-const port = Number(process.env.PORT || 4000);
+const port = Number(process.env.PORT || 5000);
 const app = createServer();
 
-app.listen(port, () => {
+app.listen(port, '127.0.0.1', () => {
   startScheduler();
   logger.info(`🚀 API server started on port ${port}`);
   logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

@@ -3,8 +3,9 @@ import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import type { ReactNode } from "react"
 
-export function ChartCard({ title, children, actions, heightClass = 'h-[300px]' }: {
+export function ChartCard({ title, description, children, actions, heightClass = 'h-[300px]' }: {
   title: string
+  description?: string
   children: ReactNode
   actions?: ReactNode
   heightClass?: string
@@ -17,11 +18,14 @@ export function ChartCard({ title, children, actions, heightClass = 'h-[300px]' 
     >
       <Card>
         <CardHeader className="flex items-center justify-between gap-4">
-          <CardTitle>{title}</CardTitle>
+          <div>
+            <CardTitle>{title}</CardTitle>
+            {description && <p className="text-sm text-slate-500 mt-1">{description}</p>}
+          </div>
           {actions}
         </CardHeader>
         <CardContent>
-          <div className={heightClass}>
+          <div className={`${heightClass} w-full min-h-[200px] min-w-[200px]`}>
             {children}
           </div>
         </CardContent>

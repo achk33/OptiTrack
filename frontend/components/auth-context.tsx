@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           })
         } catch (e) {
-          console.error('Error clearing storage:', e)
+          logger.error('Error clearing storage:', e)
         }
       }
       

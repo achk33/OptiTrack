@@ -21,15 +21,18 @@ import {
 
 type WorkOrder = {
   id: string
-  assetId: string
-  title: string
-  description: string
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
-  assignedTo: string | null
-  dueDate: string | null
+  assetMatricule: string
+  taches: any
+  priorite: string
+  assigne: string | null
+  echeance: string
+  statut: string
+  commentaires: any
+  tempsPasse: number
+  attachments: any
   createdAt: string
-  completedAt: string | null
+  updatedAt: string
+  assignedUserId: string | null
   asset?: {
     Matricule: string
     NomPrenom: string
@@ -61,9 +64,12 @@ export default function WorkOrdersPage() {
     try {
       setLoading(true)
       const res = await api.get('/workorders')
-      setWorkOrders(res.data)
+      // Backend returns { items, total, page, pageSize }
+      const data = res.data.items || res.data
+      setWorkOrders(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Failed to load work orders:', error)
+      setWorkOrders([])
     } finally {
       setLoading(false)
     }
@@ -96,49 +102,64 @@ export default function WorkOrdersPage() {
   }
 
   const filteredWorkOrders = workOrders.filter(wo => {
-    const matchesSearch = wo.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         wo.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         wo.asset?.Matricule?.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === 'ALL' || wo.status === statusFilter
-    const matchesPriority = priorityFilter === 'ALL' || wo.priority === priorityFilter
+    const matchesSearch = wo.assetMatricule?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         wo.asset?.Matricule?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         wo.assigne?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === 'ALL' || wo.statut === statusFilter
+    const matchesPriority = priorityFilter === 'ALL' || wo.priorite === priorityFilter
     return matchesSearch && matchesStatus && matchesPriority
   })
 
   const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'URGENT': return 'bg-red-100 text-red-800 border-red-200'
-      case 'HIGH': return 'bg-orange-100 text-orange-800 border-orange-200'
-      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'LOW': return 'bg-green-100 text-green-800 border-green-200'
+    switch (priority?.toLowerCase()) {
+      case 'urgente':
+      case 'urgent': return 'bg-red-100 text-red-800 border-red-200'
+      case 'haute':
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200'
+      case 'moyenne':
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'basse':
+      case 'low': return 'bg-green-100 text-green-800 border-green-200'
       default: return 'bg-gray-100 text-gray-800 border-gray-200'
     }
   }
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'COMPLETED': return <CheckCircle className="h-4 w-4 text-green-600" />
-      case 'IN_PROGRESS': return <Clock className="h-4 w-4 text-blue-600" />
-      case 'PENDING': return <AlertCircle className="h-4 w-4 text-yellow-600" />
+    switch (status?.toLowerCase()) {
+      case 'terminé':
+      case 'completed': return <CheckCircle className="h-4 w-4 text-green-600" />
+      case 'en cours':
+      case 'in_progress': return <Clock className="h-4 w-4 text-blue-600" />
+      case 'en attente':
+      case 'pending': return <AlertCircle className="h-4 w-4 text-yellow-600" />
       default: return <AlertCircle className="h-4 w-4 text-gray-600" />
     }
   }
 
   const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'PENDING': return 'En attente'
-      case 'IN_PROGRESS': return 'En cours'
-      case 'COMPLETED': return 'Terminé'
-      case 'CANCELLED': return 'Annulé'
+    switch (status?.toLowerCase()) {
+      case 'en attente':
+      case 'pending': return 'En attente'
+      case 'en cours':
+      case 'in_progress': return 'En cours'
+      case 'terminé':
+      case 'completed': return 'Terminé'
+      case 'annulé':
+      case 'cancelled': return 'Annulé'
       default: return status
     }
   }
 
   const getPriorityLabel = (priority: string) => {
-    switch (priority) {
-      case 'URGENT': return 'Urgent'
-      case 'HIGH': return 'Haute'
-      case 'MEDIUM': return 'Moyenne'
-      case 'LOW': return 'Basse'
+    switch (priority?.toLowerCase()) {
+      case 'urgente':
+      case 'urgent': return 'Urgent'
+      case 'haute':
+      case 'high': return 'Haute'
+      case 'moyenne':
+      case 'medium': return 'Moyenne'
+      case 'basse':
+      case 'low': return 'Basse'
       default: return priority
     }
   }
@@ -257,11 +278,38 @@ export default function WorkOrdersPage() {
               <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-start gap-3 mb-3">
-                    {getStatusIcon(wo.status)}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{wo.title}</h3>
-                      {wo.description && (
-                        <p className="text-gray-600 mt-1">{wo.description}</p>
+                    {getStatusIcon(wo.statut)}
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        Ordre de travail #{wo.id.slice(0, 8)}
+                      </h3>
+                      {wo.taches && (
+                        <div className="text-gray-700 mt-2">
+                          {(() => {
+                            try {
+                              const tasks = typeof wo.taches === 'string' ? JSON.parse(wo.taches) : wo.taches
+                              if (Array.isArray(tasks)) {
+                                return (
+                                  <ul className="space-y-1">
+                                    {tasks.map((task: any, idx: number) => (
+                                      <li key={idx} className="flex items-start gap-2">
+                                        <span className={`mt-1 ${task.done ? 'text-green-600' : 'text-gray-400'}`}>
+                                          {task.done ? '✓' : '○'}
+                                        </span>
+                                        <span className={task.done ? 'line-through text-gray-500' : ''}>
+                                          {task.label || task}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )
+                              }
+                              return <p className="text-sm">{String(tasks)}</p>
+                            } catch {
+                              return <p className="text-sm">{String(wo.taches)}</p>
+                            }
+                          })()}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -273,16 +321,16 @@ export default function WorkOrdersPage() {
                         <span>{wo.asset.Matricule}</span>
                       </div>
                     )}
-                    {wo.assignedTo && (
+                    {wo.assigne && (
                       <div className="flex items-center gap-1">
                         <User className="h-4 w-4" />
-                        <span>{wo.assignedTo}</span>
+                        <span>{wo.assigne}</span>
                       </div>
                     )}
-                    {wo.dueDate && (
+                    {wo.echeance && (
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
-                        <span>{new Date(wo.dueDate).toLocaleDateString('fr-FR')}</span>
+                        <span>{new Date(wo.echeance).toLocaleDateString('fr-FR')}</span>
                       </div>
                     )}
                   </div>
@@ -290,11 +338,11 @@ export default function WorkOrdersPage() {
 
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getPriorityColor(wo.priority)}`}>
-                      {getPriorityLabel(wo.priority)}
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getPriorityColor(wo.priorite)}`}>
+                      {getPriorityLabel(wo.priorite)}
                     </span>
                     <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200 text-center">
-                      {getStatusLabel(wo.status)}
+                      {getStatusLabel(wo.statut)}
                     </span>
                   </div>
                   {isAdmin && (

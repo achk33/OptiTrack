@@ -2,4 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --sidebar-width: 280px;
+}
+
 html, body, #__next { height: 100%; }
+
+@media (min-width: 1024px) {
+  body main {
+    padding-left: var(--sidebar-width);
+    transition: padding-left 0.3s ease;
+  }
+}
